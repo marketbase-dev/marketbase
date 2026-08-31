@@ -2,15 +2,22 @@
   "name": "marketbase",
   "displayName": "MarketBase",
   "version": "0.1.0",
-  "description": "The open source system of record for go-to-market data. Bootstrap a MarketBase database, source and qualify leads with full provenance, and stage them into campaigns.",
+  "description": "Your entire GTM context, in one place. Bootstrap a MarketBase database, source and qualify leads with full provenance, and stage them into campaigns.",
   "author": {
     "name": "MarketBase",
     "url": "https://github.com/marketbase-dev"
   },
   "homepage": "https://marketbase.dev",
   "repository": "https://github.com/marketbase-dev/marketbase",
-  "license": "Apache-2.0",
-  "keywords": ["gtm", "revops", "sales", "data", "postgres", "open-data"],
+  "license": "BUSL-1.1",
+  "keywords": [
+    "gtm",
+    "revops",
+    "sales",
+    "data",
+    "postgres",
+    "open-data"
+  ],
   "userConfig": {
     "database_url": {
       "type": "string",

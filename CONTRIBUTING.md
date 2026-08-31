@@ -44,4 +44,16 @@ for f in schema/0*.sql; do psql "$MARKETBASE_URL" -v ON_ERROR_STOP=1 -f "$f"; do
 
 ## License
 
-By contributing you agree your work is licensed under Apache 2.0.
+MarketBase is licensed under the [Business Source License 1.1](LICENSE), which
+converts to Apache 2.0 four years after each release.
+
+Because MarketBase is dual-licensed (BUSL for everyone, plus commercial licenses
+sold by Impact 11), we need to hold the rights to your contribution in order to
+license it under both. **All contributors must sign the
+[Contributor License Agreement](CLA.md) before their first pull request is
+merged.** You keep the copyright in your work. You grant us the right to license
+it alongside the rest of the project.
+
+This is the same arrangement used by Grafana, Mattermost, and most
+dual-licensed projects. If you are not comfortable with it, open an issue
+instead and we can implement the idea independently.
