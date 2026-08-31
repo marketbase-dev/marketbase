@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  scan:
+    name: Secret and PII scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generic secret and PII patterns
+        run: ./scripts/presubmit.sh
+
+      - name: gitleaks (full history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  validate:
+    name: Validate schema and manifests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+        ports: ['5432:5432']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Manifests are valid JSON
+        run: |
+          python3 -c "import json;[json.load(open(f)) for f in ['.claude-plugin/plugin.json','.claude-plugin/marketplace.json']]"
+
+      - name: Python parses
+        run: |
+          for f in tools/*.py tools/lib/*.py; do python3 -m py_compile "$f"; done
+
+      - name: Migrations apply cleanly, and are idempotent
+        env:
+          PGPASSWORD: postgres
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          for f in schema/0*.sql; do psql "$MARKETBASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"; done
+          echo "--- re-running to prove idempotency ---"
+          for f in schema/0*.sql; do psql "$MARKETBASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"; done
