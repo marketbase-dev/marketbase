@@ -1,0 +1,14 @@
+# Copy to .sanitize-denylist (gitignored) and add the terms YOUR fork must
+# never publish: customer names, colleague names, internal project codenames,
+# vendor account handles.
+#
+# One term per line, case-insensitive, matched as a plain substring with NO
+# word boundaries, so "acme" also catches "acme_engager_queued" and
+# "Acme_TAM_Top200_v1".
+#
+# This file is an example. The real list is deliberately never committed,
+# because a public denylist of client names leaks the client names.
+
+# ExampleCorp
+# NorthwindLtd
+# jane-the-colleague

@@ -93,7 +93,7 @@ no hyphens. Pick from the closed set of categories below; values inside a
 category are open. Status / state tags use the present tense
 (`state:engagers_researched`, not `state:engagers_done`). Client-scoped
 values prefix the client slug into the value
-(`campaign:knock_ai_round_2_invite`, never a third dotted segment).
+(`campaign:acme_round_2_invite`, never a third dotted segment).
 
 ### Tag categories (closed set)
 

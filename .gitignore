@@ -27,3 +27,6 @@ data/local/
 *.dump
 *.csv
 !datasets/**/*.csv
+
+# Private denylist for scripts/presubmit.sh (never commit)
+.sanitize-denylist
