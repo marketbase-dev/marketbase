@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MarketBase | The open source system of record for go-to-market data</title>
-<meta name="description" content="MarketBase sits between your data vendors and your sequencer. An open source Postgres schema that becomes the source of truth for your prospect data, with provenance, versioned judgment, and outcomes.">
+<title>MarketBase | Your entire GTM context in one place</title>
+<meta name="description" content="MarketBase is an open source go-to-market database. Store all your GTM data from every source in one Postgres instance you own: versioned, deduplicated, enriched once, and shared by your whole team, human and agent.">
 <meta property="og:title" content="MarketBase">
-<meta property="og:description" content="The open source system of record for go-to-market data.">
+<meta property="og:description" content="Your entire GTM context in one place. Open source, self-hosted, yours.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://marketbase.dev">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f766e'/><path d='M22 72V28h12l16 26 16-26h12v44H66V48L50 72 34 48v24z' fill='white'/></svg>">
@@ -115,7 +115,7 @@ footer a:hover{text-decoration:underline}
 <header>
   <div class="wrap">
     <a class="brand" href="/">Market<span>Base</span></a>
-    <a class="nav" href="#what">What it is</a>
+    <a class="nav" href="#why">Why</a>
     <a class="nav" href="#start">Quickstart</a>
     <a class="nav" href="#data">Datasets</a>
     <a class="nav keep" href="https://github.com/marketbase-dev/marketbase">GitHub</a>
@@ -124,10 +124,10 @@ footer a:hover{text-decoration:underline}
 
 <div class="hero">
   <div class="wrap">
-    <div class="tag">Open source · Apache 2.0</div>
-    <h1>The system of record<br>for go-to-market data.</h1>
-    <p class="lede"><strong>MarketBase sits between your data vendors and your sequencer.</strong></p>
-    <p class="lede">A Postgres schema and a small toolkit that becomes the source of truth for your prospect data. Every lead knows where it came from, why you qualified it, and what happened next.</p>
+    <div class="tag">Open source · Apache 2.0 · Self-hosted</div>
+    <h1>Your entire GTM context,<br>in one place.</h1>
+    <p class="lede">Every source, every enrichment, every decision. Versioned, remembered, and stored in a Postgres database <strong>you own</strong>.</p>
+    <p class="lede">Shared by your whole team, human and agent.</p>
     <div class="cta">
       <a class="btn primary" href="#start">Get started</a>
       <a class="btn ghost" href="https://github.com/marketbase-dev/marketbase">View on GitHub</a>
@@ -135,25 +135,43 @@ footer a:hover{text-decoration:underline}
   </div>
 </div>
 
-<section id="problem">
+<section id="why">
   <div class="wrap">
-    <h2>The gap nobody owns</h2>
-    <p>You buy data from Apollo, ZoomInfo, Clay, or a scraper. You send it from Outreach, Smartlead, or Lemlist. The space in between is CSVs, Zapier, and a spreadsheet somebody renamed <code class="inline">FINAL_v3</code>.</p>
-    <p>That gap is where the expensive problems live.</p>
-    <ul class="pain">
-      <li>You re-buy contacts you already paid for, because nothing remembers you bought them.</li>
-      <li>You cannot answer "why is this person on the list?" three weeks later.</li>
-      <li>You message someone at an account that already has an open deal.</li>
-      <li>Three lists disagree and nobody knows which one is real.</li>
-      <li>Someone changes the targeting rules and last month's numbers stop making sense.</li>
-    </ul>
+    <h2>What you get</h2>
+    <p>GTM data ends up scattered across CSVs, vendor dashboards, and a CRM nobody wants to pollute. MarketBase gives it one home.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Everything lands here</h3>
+        <p>Every source, every format, straight in. Vendors, scrapers, exports, manual research. Stop passing spreadsheets around and stop treating a CSV as a system of record.</p>
+      </div>
+      <div class="card">
+        <h3>Your CRM stays clean</h3>
+        <p>Raw prospect data does not belong in Salesforce. Keep the mess here, promote only what is real and qualified, and stop flooding your CRM with records nobody has vetted.</p>
+      </div>
+      <div class="card">
+        <h3>Never enrich twice</h3>
+        <p>Every paid API response is cached before it is parsed. Re-runs, new pipelines, and bug fixes all read from cache. You see exactly what you spent and on what.</p>
+      </div>
+      <div class="card">
+        <h3>You own the keys and the bill</h3>
+        <p>Your Postgres, your API keys, your vendor contracts, your costs. No platform in the middle marking up your own data back to you, and no lock-in to leave behind.</p>
+      </div>
+      <div class="card">
+        <h3>Humans and agents, one database</h3>
+        <p>Claude Code, Cursor, a teammate in psql, a nightly cron job. Everyone reads and writes the same context, whatever harness they use. No agent starts from zero.</p>
+      </div>
+      <div class="card">
+        <h3>One shared picture</h3>
+        <p>Competitors, buyers, signals, conversations, and the reasoning behind every targeting call. All in one place, so the whole team is working from the same understanding.</p>
+      </div>
+    </div>
   </div>
 </section>
 
 <section id="what">
   <div class="wrap">
-    <h2>Four things, kept separate</h2>
-    <p>Every commercial GTM tool smears these together. MarketBase does not.</p>
+    <h2>Context, not just records</h2>
+    <p>Storing rows is easy. MarketBase also stores how each lead got here and why you decided what you decided, which is what makes the context worth sharing. Four concerns, kept separate.</p>
     <div class="tscroll">
     <table>
       <tr><th>Concern</th><th>Where it lives</th><th>The question it answers</th></tr>
@@ -169,7 +187,7 @@ footer a:hover{text-decoration:underline}
 
 <section id="where">
   <div class="wrap">
-    <h2>Where it fits</h2>
+    <h2>Where it sits in your stack</h2>
     <div class="diagram">
 <pre>  Data vendors                <b>MarketBase</b>                 Execution
   ────────────                ──────────                 ─────────
