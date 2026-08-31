@@ -50,9 +50,11 @@ if [ -f "$DENY" ]; then
   while IFS= read -r term; do
     [ -z "$term" ] && continue
     case "$term" in \#*) continue ;; esac
-    # No word boundaries: catches name_glued_to_underscores, the bug that
-    # slipped Copperhelm_TAM_Top200_v1 past an earlier scan.
-    scan "$(printf '%s' "$term" | sed 's/[][\.*^$/]/\\&/g')" "denylisted term: $term"
+    # Letter-only boundaries. Catches Name_TAM_v1 and name_queued, because
+    # underscores and digits are not letters, but never matches a name that
+    # happens to be a substring of a real word (tatio inside annotations).
+    esc=$(printf '%s' "$term" | sed 's/[][\.*^$/]/\\&/g')
+    scan "(^|[^A-Za-z])${esc}([^A-Za-z]|$)" "denylisted term: $term"
   done < "$DENY"
 else
   echo "NOTE: no $DENY found. Generic patterns only."

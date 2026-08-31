@@ -19,7 +19,7 @@ Usage:
   # Remove a tag
   python3 tag_lead.py --client Acme-AI --lead-url https://… --tag old-status --remove
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

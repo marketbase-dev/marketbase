@@ -19,10 +19,16 @@
     "open-data"
   ],
   "userConfig": {
+    "default_instance": {
+      "type": "string",
+      "title": "Default MarketBase instance",
+      "description": "Which instance commands act on when --instance is not given. Leave blank if you run only one.",
+      "required": false
+    },
     "database_url": {
       "type": "string",
       "title": "MarketBase database URL",
-      "description": "Postgres connection string for your MarketBase instance (e.g. postgresql://user:pass@host/db)",
+      "description": "Postgres connection string. Only needed for a single-instance setup without Infisical.",
       "sensitive": true,
       "required": false
     }

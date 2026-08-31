@@ -7,7 +7,7 @@ or a marketbase-*/SKILL.md was actually edited since the last rebuild.
 
 Must NEVER crash the parent process. All exceptions are swallowed.
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import sys
 from pathlib import Path

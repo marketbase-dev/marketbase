@@ -28,7 +28,7 @@ CLI:
 Resumable: every phase auto-skips already-done work, so you can re-run
 after a transient failure without losing progress.
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

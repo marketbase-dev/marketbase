@@ -7,7 +7,7 @@ The convention:
   - All MarketBase skills accept --client <ClientName> and read the corresponding
     env file via load_client_env().
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import os
 import re

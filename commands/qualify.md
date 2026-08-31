@@ -49,3 +49,7 @@ SELECT * FROM v_qualified_held_by_active_deal;
 ```
 
 Report qualified, disqualified, skipped, and held-by-deal counts separately.
+
+## Instances
+
+This command accepts `--instance <name>` to select which MarketBase database to act on. See `/marketbase:instances`. When more than one instance is configured and the user has not said which, ask rather than guessing.

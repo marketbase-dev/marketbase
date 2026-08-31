@@ -22,7 +22,7 @@ CLI:
   python3 fill_basic_profile.py --client Acme-AI \\
       --where-blank-headline   # only PTLs (or anyone) with empty headline
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

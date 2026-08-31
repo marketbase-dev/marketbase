@@ -11,7 +11,7 @@ Behavior:
     already carries a Persona Classification (so qualification history is
     captured at import time, not lost).
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

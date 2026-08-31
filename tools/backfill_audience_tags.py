@@ -15,7 +15,7 @@ apply, so it can't drift from the rules.
 
   python3 backfill_audience_tags.py --client "Amplifier Security" [--dry-run]
 """
-from __future__ import annoacmens
+from __future__ import annotations
 import argparse, os, sys
 from pathlib import Path
 sys.path.insert(0, os.path.expanduser("~/.claude/tools"))

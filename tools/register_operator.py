@@ -18,7 +18,7 @@ Usage:
   python3 register_operator.py --client Acme \\
     --unipile-account-id <id> --deactivate
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import json
