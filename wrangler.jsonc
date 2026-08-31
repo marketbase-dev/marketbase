@@ -1,0 +1,12 @@
+{
+  // Static-asset Worker. No server-side code: Cloudflare serves ./docs directly.
+  // Config lives here rather than in dashboard settings so the deploy is
+  // reproducible, reviewable, and portable.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "marketbase",
+  "compatibility_date": "2026-08-31",
+  "assets": {
+    "directory": "./docs",
+    "not_found_handling": "404-page"
+  }
+}
