@@ -1,14 +1,14 @@
 # Bringing the migrations in
 
 `000_bootstrap.sql` is the only migration committed so far. The real schema
-lives in your private gtmdb toolkit and has not been copied here yet, on
+lives in your private MarketBase toolkit and has not been copied here yet, on
 purpose: this repo is going public, so every file should be reviewed once
 before it lands.
 
 To bring them in after review:
 
 ```bash
-cp ~/.claude/tools/gtmdb/schema/0*.sql schema/
+cp ~/.claude/tools/MarketBase/schema/0*.sql schema/
 ```
 
 Before committing, check each file for:
