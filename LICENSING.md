@@ -44,6 +44,30 @@ Two things we cannot do, by design:
    2.0 four years after its release, regardless of what we do later. That
    promise is not reversible.
 
+## Ownership and successors
+
+Copyright in MarketBase is held by Impact 11, LLC and may be assigned to a
+successor entity through reorganization, a change of corporate form, merger,
+acquisition, or an asset sale. The `CLA.md` rights granted by contributors
+expressly run to Impact 11, LLC and its successors, so a change of owner does not
+disturb them.
+
+Future releases will name the then-current Licensor. Already-published versions
+continue to name the Licensor at the time of their release, and remain valid.
+
+## Going source-closed
+
+Impact 11, LLC is under no obligation to publish source for future versions.
+
+Three things would remain true regardless:
+
+1. Every already-published version stays licensed to everyone who received it,
+   permanently and irrevocably.
+2. Every already-published version still converts to Apache 2.0 four years after
+   its own release. Ceasing to publish does not cancel a pending conversion.
+3. Anyone may fork the last published version and continue it independently,
+   subject to the Additional Use Grant until that version converts.
+
 ## Proprietary modules
 
 BUSL is not a copyleft license. It does not require that everything built
