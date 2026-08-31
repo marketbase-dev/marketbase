@@ -13,7 +13,7 @@
 No disk writes. Everything in-memory; persistence is exclusively in Postgres.
 """
 
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import json

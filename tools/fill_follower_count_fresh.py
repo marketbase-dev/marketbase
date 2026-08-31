@@ -17,7 +17,7 @@ Usage:
     --where-tag engager:jane_doe_posts \\
     --where-persona 'demand gen service provider' --where-blank-follower
 """
-from __future__ import annotations
+from __future__ import annoacmens
 import argparse, os, sys, urllib.request, urllib.parse, urllib.error, json
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))

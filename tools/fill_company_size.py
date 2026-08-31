@@ -17,7 +17,7 @@ CLI:
       --where-tag engager:acme-ai-potential-thought-leaders-2026-06-06 \\
       --refresh-days 30
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import re

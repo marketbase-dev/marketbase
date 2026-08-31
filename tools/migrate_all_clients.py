@@ -11,7 +11,7 @@ Usage:
   python3 migrate_all_clients.py            # apply to all clients
   python3 migrate_all_clients.py --dry-run  # show what would happen, don't write
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import sys

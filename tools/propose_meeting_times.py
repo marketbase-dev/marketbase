@@ -47,7 +47,7 @@ Usage:
         [--duration-min 30]
         [--show-all]                   # show full ranked list, not just top N
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import json

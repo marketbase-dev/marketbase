@@ -10,7 +10,7 @@ Usage:
   python3 show_process.py --client Acme-AI --name demand_gen_persona_classifier --version 2026-05-acme-ai
   python3 show_process.py --client Acme-AI --name demand_gen_persona_classifier --metadata-only
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import sys

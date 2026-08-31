@@ -16,7 +16,7 @@ Usage:
 Writes to: posts, post_engagements, leads, lead_sources, searches.
 No disk artifacts.
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import json

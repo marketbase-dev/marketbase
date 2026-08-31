@@ -29,7 +29,7 @@ A secret can be scoped per MarketBase instance with an Infisical path.
 `get("DATABASE_URL", instance="acme")` looks up `/acme/DATABASE_URL` first,
 then falls back to `/DATABASE_URL`.
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import os
 from functools import lru_cache

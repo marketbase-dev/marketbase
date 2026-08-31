@@ -27,7 +27,7 @@ Usage:
   python3 recover_reactions_freshdata.py --client Acme \
       --poster initrode-security --source-label "Initrode Security (competitor)"
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import json

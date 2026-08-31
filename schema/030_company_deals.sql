@@ -7,8 +7,8 @@
 -- HubSpot stays the system of record for deal progression. This table holds
 -- only enough state to ACT (exclude / pull from outreach). One row per deal,
 -- keyed on the HubSpot deal id. An external once-daily job mirrors HubSpot:
---   • per deal:  SELECT gtmdb_sync_deal(...)           (idempotent upsert)
---   • once/run:  SELECT gtmdb_reconcile_deleted_deals(<all live ids>)
+--   • per deal:  SELECT marketbase_sync_deal(...)           (idempotent upsert)
+--   • once/run:  SELECT marketbase_reconcile_deleted_deals(<all live ids>)
 --
 -- Product rules baked in here:
 --   • Open OR won deal  → company is "protected" (all its leads excluded).
@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_company_deals_protect ON company_deals(match_slug
 -- fetch failed and the job sends NULLs, we keep the previously-resolved
 -- company linkage rather than wiping a company's protection. Deal-derived
 -- fields (stage_id, is_open, is_won, amount) always reflect the latest fetch.
-CREATE OR REPLACE FUNCTION gtmdb_sync_deal(
+CREATE OR REPLACE FUNCTION marketbase_sync_deal(
     p_hs_deal_id    text,
     p_hs_company_id text,
     p_company_name  text,
@@ -124,7 +124,7 @@ END $$;
 -- The caller MUST only call this after a complete, error-free pull of all
 -- deals; a partial list would wrongly mark live deals as deleted. As a
 -- backstop this no-ops on a NULL/empty array. Returns the count newly deleted.
-CREATE OR REPLACE FUNCTION gtmdb_reconcile_deleted_deals(p_live_deal_ids text[])
+CREATE OR REPLACE FUNCTION marketbase_reconcile_deleted_deals(p_live_deal_ids text[])
 RETURNS integer LANGUAGE plpgsql AS $$
 DECLARE
     v_count integer;
