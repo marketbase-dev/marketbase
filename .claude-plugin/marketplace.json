@@ -1,5 +1,6 @@
 {
   "name": "marketbase",
+  "description": "Open source infrastructure for go-to-market data: schema, datasets, and tooling.",
   "owner": {
     "name": "MarketBase",
     "url": "https://github.com/marketbase-dev"
@@ -12,7 +13,12 @@
       "version": "0.1.0",
       "license": "Apache-2.0",
       "homepage": "https://marketbase.dev",
-      "keywords": ["gtm", "revops", "postgres", "open-data"]
+      "keywords": [
+        "gtm",
+        "revops",
+        "postgres",
+        "open-data"
+      ]
     }
   ]
 }
