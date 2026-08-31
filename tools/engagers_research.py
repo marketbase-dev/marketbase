@@ -20,7 +20,7 @@ per-post call we make; re-runs skip queries we've already executed within
 No files written — everything persists in Postgres.
 """
 
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import json

@@ -28,7 +28,7 @@ Usage:
   python3 policy_employer_dq.py --client Acme           # apply
   python3 policy_employer_dq.py --client Acme --dry-run # preview only
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import sys

@@ -13,7 +13,7 @@ Usage:
   python3 rebuild_context.py --all
   python3 rebuild_context.py --client Acme --force   # ignore hash match
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import hashlib

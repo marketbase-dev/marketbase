@@ -11,7 +11,7 @@ UPSERTs campaign_members (lead_id, campaign_id) — never duplicates.
 If a member already exists with a DIFFERENT status, leaves the status alone
 unless --force-status is passed.
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

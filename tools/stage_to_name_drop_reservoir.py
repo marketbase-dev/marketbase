@@ -35,7 +35,7 @@ Usage:
     [--period 202606]                         # default: current YYYYMM
     [--dry-run]
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

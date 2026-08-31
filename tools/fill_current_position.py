@@ -14,7 +14,7 @@ Usage:
   python3 fill_current_position.py --client Acme --where-tag acme_engager_persona_queued
   python3 fill_current_position.py --client Acme --lead-file leads.csv --refresh
 """
-from __future__ import annoacmens
+from __future__ import annotations
 import argparse, sys, csv as _csv
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed

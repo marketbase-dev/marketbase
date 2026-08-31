@@ -21,7 +21,7 @@ Idempotent — re-runs UPSERT leads and append new lead_sources rows; for
 re-syncs we keep multiple lead_sources rows so we can see when a connection
 was first observed.
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import json

@@ -31,7 +31,7 @@ Usage:
     # cached (never re-pay), pass a psycopg conn:
     d = saleleads.post_reactions(pid, cache_conn=conn)
 """
-from __future__ import annoacmens
+from __future__ import annotations
 import json, os, threading, time, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 

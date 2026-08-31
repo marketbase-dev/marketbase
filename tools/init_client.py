@@ -17,7 +17,7 @@ Usage:
 Idempotent — safe to re-run. Each migration uses CREATE IF NOT EXISTS / DO
 blocks so applying twice is a no-op.
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import json

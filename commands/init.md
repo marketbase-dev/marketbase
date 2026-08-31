@@ -48,3 +48,7 @@ versus already current.
 
 If you provisioned a new database, write the URL to a local `.env` file
 (chmod 600) and confirm `.env` is gitignored. Never commit a connection string.
+
+## Instances
+
+This command accepts `--instance <name>` to select which MarketBase database to act on. See `/marketbase:instances`. When more than one instance is configured and the user has not said which, ask rather than guessing.

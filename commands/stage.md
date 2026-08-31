@@ -48,3 +48,7 @@ and writes state back:
 ```sql
 SELECT * FROM v_campaign_funnel WHERE campaign_name = '<name>';
 ```
+
+## Instances
+
+This command accepts `--instance <name>` to select which MarketBase database to act on. See `/marketbase:instances`. When more than one instance is configured and the user has not said which, ask rather than guessing.

@@ -15,7 +15,7 @@ Usage:
   python3 export_expansion_csv.py --client Acme [--tier qualified|backup|all]
       [--output <path.csv>]
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

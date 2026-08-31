@@ -231,7 +231,7 @@ for f in schema/0*.sql; do psql "$MARKETBASE_URL" -f "$f"; done</pre>
 <pre>marketbase import leads.csv --source apollo --label <span class="a">"Q3 ICP pull"</span>
 marketbase qualify --qualifier icp_v1
 marketbase export --campaign q3_outbound --format csv</pre>
-    <p class="note">You do not need to know what a data warehouse is to use MarketBase. Postgres is an implemenacmen detail.</p>
+    <p class="note">You do not need to know what a data warehouse is to use MarketBase. Postgres is an implementation detail.</p>
   </div>
 </section>
 
@@ -239,7 +239,7 @@ marketbase export --campaign q3_outbound --format csv</pre>
   <div class="wrap">
     <h2>Open datasets</h2>
     <p>MarketBase publishes open, well-structured GTM datasets under the same schema, so they load straight into your instance.</p>
-    <p>Every dataset ships with a manifest recording where it came from, when it was collected, its license, and its known limiacmens. Provenance is the whole point of this project, and that applies to our own data too.</p>
+    <p>Every dataset ships with a manifest recording where it came from, when it was collected, its license, and its known limitations. Provenance is the whole point of this project, and that applies to our own data too.</p>
     <div class="tscroll">
     <table>
       <tr><th>Dataset</th><th>Description</th><th>Status</th></tr>

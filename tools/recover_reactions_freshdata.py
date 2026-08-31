@@ -27,7 +27,7 @@ Usage:
   python3 recover_reactions_freshdata.py --client Acme \
       --poster zafran-security --source-label "Zafran Security (competitor)"
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import json

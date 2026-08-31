@@ -8,7 +8,7 @@ Usage:
   python3 list_reports.py --client Acme-AI --archived    # archived only
   python3 list_reports.py --client Acme-AI --all         # both
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import sys

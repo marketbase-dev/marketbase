@@ -23,7 +23,7 @@ Usage:
   python3 backfill_reactions_linkdapi.py --client Acme-AI --poster alonrosenberg
   python3 backfill_reactions_linkdapi.py --client Acme-AI --min-missing 5
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import os

@@ -32,7 +32,7 @@ Usage:
   python3 register_processor.py --client Acme-AI --yaml-file spec.yaml
   python3 register_processor.py --client Acme-AI --yaml-stdin           # read from stdin
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import sys

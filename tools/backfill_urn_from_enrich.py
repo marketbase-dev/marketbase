@@ -21,7 +21,7 @@ Usage:
     set -a; source ~/.env; source ~/.env.Acme; set +a
     python3 backfill_urn_from_enrich.py --client Acme [--limit N] [--refresh] [--dry-run]
 """
-from __future__ import annoacmens
+from __future__ import annotations
 import argparse, json, os, re, sys, urllib.parse, urllib.request, urllib.error
 from pathlib import Path
 

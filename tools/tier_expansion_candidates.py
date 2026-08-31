@@ -25,7 +25,7 @@ Usage:
   python3 tier_expansion_candidates.py --client Acme [--cap 5]
       [--source-type buying_committee_expansion] [--dry-run]
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import os

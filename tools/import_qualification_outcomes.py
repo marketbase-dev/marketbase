@@ -33,7 +33,7 @@ Usage:
   python3 import_qualification_outcomes.py --client Acme \
       --csv ".../webhook-outcome-logs-2026-08-12.csv" [--client-key Acme] [--dry-run]
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

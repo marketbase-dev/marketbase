@@ -15,7 +15,7 @@ Usage:
   set -a; source ~/.env.Acme; set +a
   python3 pending_decisions_report.py --client Acme
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import sys

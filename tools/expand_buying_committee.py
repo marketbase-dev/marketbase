@@ -30,7 +30,7 @@ pushing it back into the API body: it will not error, it will just ingest the
 whole company.
 
 Cost + safety:
-  * the Blitz key is PINNED from config (`blitz.key_env`) and roacmen is off by
+  * the Blitz key is PINNED from config (`blitz.key_env`) and rotation is off by
     default, so a run for one client can never be billed to another client's key;
   * every Blitz page is cached in `enrichment_calls` BEFORE it is processed, so a
     crash or re-run replays instead of re-paying.
@@ -39,7 +39,7 @@ Usage:
   python3 expand_buying_committee.py --client Acme [--config <path>]
       [--limit N] [--dry-run] [--refresh]
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import json
@@ -126,7 +126,7 @@ RE_WRONG_FUNCTION = re.compile(
 
 # "Controller" that has nothing to do with finance.
 RE_FALSE_CONTROLLER = re.compile(
-    r"\b(quality|document|documenacmen|air\s?traffic|traffic|production|inventory|"
+    r"\b(quality|document|documentation|air\s?traffic|traffic|production|inventory|"
     r"materials|stock|credit|process|systems?)\s+controller\b", re.I)
 
 
@@ -286,7 +286,7 @@ class Blitz:
         if not self.key:
             sys.exit(f"{self.key_env} is not set. Refusing to fall back to another "
                      f"client's Blitz key.")
-        self.allow_roacmen = bool(cfg.get("allow_key_roacmen", False))
+        self.allow_rotation = bool(cfg.get("allow_key_rotation", False))
         self.conn = conn
         self.refresh = refresh
         self.live_calls = 0
@@ -323,7 +323,7 @@ class Blitz:
                     payload = e.read().decode()
                     err = f"HTTP {e.code}: {payload[:300]}"
                     if ("credit" in payload.lower() or e.code in (402, 429)) \
-                            and not self.allow_roacmen:
+                            and not self.allow_rotation:
                         # Never silently spend another customer's credits.
                         cur.execute("""INSERT INTO enrichment_calls
                                          (api, endpoint, params, success, response, error_message)
@@ -331,7 +331,7 @@ class Blitz:
                                     (Jsonb(body), Jsonb({}), err))
                         self.conn.commit()
                         sys.exit(f"\n{self.key_env} is exhausted or rate-limited ({err}).\n"
-                                 f"Key roacmen is off for this client. Stopping so the run "
+                                 f"Key rotation is off for this client. Stopping so the run "
                                  f"cannot spill onto another customer's key.")
                     break
                 except (urllib.error.URLError, ConnectionResetError, TimeoutError,

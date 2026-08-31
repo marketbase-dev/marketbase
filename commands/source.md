@@ -45,3 +45,7 @@ customer, partner). Do not conflate them.
 SELECT source_type, source_label, count(*)
 FROM lead_sources GROUP BY 1, 2 ORDER BY 3 DESC;
 ```
+
+## Instances
+
+This command accepts `--instance <name>` to select which MarketBase database to act on. See `/marketbase:instances`. When more than one instance is configured and the user has not said which, ask rather than guessing.
