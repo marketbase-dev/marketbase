@@ -1,7 +1,7 @@
 <h1 align="center">MarketBase</h1>
 
 <p align="center">
-  <strong>The open source system of record for go-to-market data.</strong>
+  <strong>Your entire GTM context, in one place.</strong>
 </p>
 
 <p align="center">
@@ -20,28 +20,42 @@
 
 ---
 
-## MarketBase sits between your data vendors and your sequencer
+## One home for your go-to-market context
 
-You buy data from Apollo, ZoomInfo, Clay, or a scraper. You send it from Outreach,
-Smartlead, or Lemlist. The space in between is CSVs, Zapier, and a spreadsheet
-somebody renamed `FINAL_v3`.
+GTM data ends up scattered across CSVs, vendor dashboards, and a CRM nobody
+wants to pollute. MarketBase gives it one home: a Postgres database you own,
+holding every source, every enrichment, and every decision, versioned and
+remembered.
 
-That gap is where the expensive problems live:
+**Everything lands here.** Every source, every format, straight in. Vendors,
+scrapers, exports, manual research. Stop passing spreadsheets around and stop
+treating a CSV as a system of record.
 
-- You re-buy contacts you already paid for, because nothing remembers you bought them.
-- You cannot answer "why is this person on the list?" three weeks later.
-- You message someone at an account that already has an open deal.
-- Three lists disagree and nobody knows which one is real.
-- A teammate changes the targeting rules and last month's numbers stop making sense.
+**Your CRM stays clean.** Raw prospect data does not belong in Salesforce. Keep
+the mess here, promote only what is real and qualified, and stop flooding your
+CRM with records nobody has vetted.
 
-MarketBase is the layer that fixes this. It is a Postgres schema, a set of
-migrations, and a small toolkit that becomes the source of truth for your
-prospect data. Your vendors write into it. Your sequencer reads from it and
-writes state back.
+**Never enrich twice.** Every paid API response is cached before it is parsed.
+Re-runs, new pipelines, and bug fixes all read from cache. You see exactly what
+you spent and on what.
 
-## What it actually does
+**You own the keys and the bill.** Your Postgres, your API keys, your vendor
+contracts, your costs. No platform in the middle marking up your own data back
+to you, and nothing to migrate off if you leave.
 
-MarketBase keeps four things separate that every commercial GTM tool smears together.
+**Humans and agents work from one database.** Claude Code, Cursor, a teammate in
+psql, a nightly cron job. Everyone reads and writes the same context, whatever
+harness they use. No agent starts from zero.
+
+**One shared picture.** Competitors, buyers, signals, conversations, and the
+reasoning behind every targeting call. All in one place, so the whole team is
+working from the same understanding.
+
+## Context, not just records
+
+Storing rows is easy. MarketBase also stores how each lead got here and why you
+decided what you decided, which is what makes the context worth sharing across a
+team. Four concerns, kept separate.
 
 | Concern | Where it lives | The question it answers |
 |---|---|---|
@@ -65,7 +79,7 @@ Two more pieces matter in practice:
   an open opportunity are suppressed automatically, instead of getting cold
   outbound from a rep who did not know.
 
-## Where it fits
+## Where it sits in your stack
 
 ```
    Data vendors                MarketBase                  Execution
@@ -192,6 +206,27 @@ marketbase/
 3. **Never pay twice.** Every paid API response is cached before it is parsed.
 4. **Migrations are additive and forever.** No drops, no renames, no type changes.
 5. **MarketBase is the source of truth. Everything else is a consumer.**
+
+## Secrets
+
+MarketBase never hard-codes credentials. Secrets resolve through
+[Infisical](https://infisical.com) first, then the environment, then a local
+`.env`:
+
+```bash
+export INFISICAL_PROJECT_ID=...
+export INFISICAL_CLIENT_ID=...        # machine identity
+export INFISICAL_CLIENT_SECRET=...
+```
+
+Or run any tool under the Infisical CLI, which injects secrets as env vars:
+
+```bash
+infisical run --env=prod -- python3 tools/qualify_cohort.py
+```
+
+Secrets can be scoped per instance, so `DATABASE_URL` differs between your
+MarketBase instances without any code change. See `tools/lib/secrets.py`.
 
 ## License
 
