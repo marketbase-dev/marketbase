@@ -237,11 +237,15 @@ for your clients, modify it, self-host it, build on it. That is all expressly
 permitted and always free.
 
 **One restriction:** you may not offer MarketBase to third parties as a hosted,
-managed, or embedded product that competes with Impact 11's paid version.
+managed, or embedded product whose value derives substantially from what
+MarketBase does.
 
-**It becomes Apache 2.0 on 2030-08-31.** Every version converts to a fully
+**It becomes Apache 2.0 four years after its release.** Every version converts to a fully
 permissive open source license four years after release, and that date is
 written into the license itself, not left to our discretion.
+
+See [LICENSING.md](LICENSING.md) for the full map, including relicensing and
+proprietary modules.
 
 BUSL is a *source available* license, not an OSI-approved open source license.
 We say "source available" rather than "open source" because the distinction is
