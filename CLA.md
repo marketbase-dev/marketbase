@@ -82,7 +82,21 @@ code whose license is incompatible with the terms above.
 Your Contribution is provided as is, without warranty of any kind, express or
 implied.
 
-## 10. Entire agreement
+## 10. Assignment and successors
+
+Impact 11, LLC may assign this Agreement, and all rights and licenses granted
+under it, to any successor entity, including through reorganization, a change of
+corporate form, merger, acquisition, or a sale of substantially all assets
+relating to the project. The rights you grant here run to Impact 11, LLC and its
+successors and assigns.
+
+You may not assign this Agreement without our written consent.
+
+This Agreement binds and benefits the parties and their respective successors.
+It survives any change in ownership, name, or corporate form of Impact 11, LLC,
+and it survives the termination of your participation in the project.
+
+## 11. Entire agreement
 
 This Agreement is the complete agreement concerning your Contributions and
 supersedes any prior understanding.
