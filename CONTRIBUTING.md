@@ -59,3 +59,23 @@ it alongside the rest of the project.
 This is the same arrangement used by Grafana, Mattermost, and most
 dual-licensed projects. If you are not comfortable with it, open an issue
 instead and we can implement the idea independently.
+
+## Before you commit
+
+This repo ships a pre-submit scanner. Install it once:
+
+```bash
+ln -sf ../../scripts/presubmit.sh .git/hooks/pre-commit
+```
+
+It blocks commits containing API keys, private keys, database URLs with inline
+passwords, local absolute paths, and real email addresses.
+
+If you maintain a fork that pulls from a private codebase, also copy
+`.sanitize-denylist.example` to `.sanitize-denylist` and add the customer,
+colleague, and internal project names your fork must never publish. That file is
+gitignored deliberately: a public denylist of client names would leak the client
+names it exists to protect.
+
+The same scan runs in CI on every push and pull request, alongside gitleaks over
+the full history.
