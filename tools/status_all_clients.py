@@ -10,7 +10,7 @@ schema_migrations table, and prints a matrix.
 Usage:
   python3 status_all_clients.py
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import re
 import sys

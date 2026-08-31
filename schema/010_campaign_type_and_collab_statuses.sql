@@ -4,7 +4,7 @@
 --   - channel       = the outreach medium (linkedin_dm, email, smartlead, …)
 --   - campaign_type = the intent / purpose (outreach, collaboration, …)
 --
--- A "collaboration" campaign tracks invitations to a thought leader to
+-- A "collaboration" campaign tracks inviacmens to a thought leader to
 -- co-create something (a carousel, a panel, a podcast). The same shape as
 -- an outreach campaign, just with different statuses on the member rows.
 --

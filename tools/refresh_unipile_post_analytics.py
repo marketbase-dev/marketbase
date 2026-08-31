@@ -21,7 +21,7 @@ Reposts are skipped (their reach belongs to the original author).
 
 Usage: python3 refresh_unipile_post_analytics.py --client Acme-AI --profile alonrosenberg [--name "Riley Rosenberg"] [--limit 60]
 """
-from __future__ import annotations
+from __future__ import annoacmens
 import argparse, json, os, re, sys
 from pathlib import Path
 

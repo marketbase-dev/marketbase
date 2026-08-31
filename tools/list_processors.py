@@ -10,7 +10,7 @@ Usage:
   python3 list_processors.py --client Acme-AI --type classifier
   python3 list_processors.py --client Acme-AI --name demand_gen_persona_classifier --all
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import sys

@@ -17,7 +17,7 @@ After this, RE-CLASSIFY with demand_gen_persona_classifier@1.0.
 
 Cost: ~$0.005 per lead (one Saleleads call).
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import sys

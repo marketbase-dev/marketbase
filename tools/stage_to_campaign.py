@@ -11,7 +11,7 @@ UPSERTs campaign_members (lead_id, campaign_id) — never duplicates.
 If a member already exists with a DIFFERENT status, leaves the status alone
 unless --force-status is passed.
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import csv
@@ -49,7 +49,7 @@ VALID_CHANNELS = ("linkedin_dm","linkedin_invite","email","dripify","smartlead",
 #            source                  persona       sequencer                       descriptor      period
 #
 # Token meanings:
-#   source     — where the leads came from (likelyToAccept, mythosEngagers,
+#   source     — where the leads came from (likelyToAccept, northwindEngagers,
 #                founderNetwork, dripifyTargets, …)
 #   persona    — the persona / ICP slice we're targeting (e.g. allCloudAndSecPersonasV1,
 #                cisoNonVendorV1, vpSecurityV2 — bump the suffix when the
@@ -137,7 +137,7 @@ def read_urls_from_file(path: Path) -> list[str]:
 def main():
     ap = argparse.ArgumentParser(prog="marketbase-stage-to-campaign")
     ap.add_argument("--client", required=True)
-    ap.add_argument("--campaign", required=True, help="Campaign name (e.g. shimon_ciso_dripify_2026_05)")
+    ap.add_argument("--campaign", required=True, help="Campaign name (e.g. dana_ciso_dripify_2026_05)")
     ap.add_argument("--channel", required=True, choices=VALID_CHANNELS)
     ap.add_argument("--owner")
     ap.add_argument("--persona-target", help="CISO / Cloud Security / etc.")

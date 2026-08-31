@@ -26,7 +26,7 @@ is no, it belongs in application code or a one-shot script, not in the schema.
 ## Contributing a dataset
 
 Every dataset needs a `manifest.json` recording its source, collection date,
-license, and known limitations. Datasets without provenance will not be merged,
+license, and known limiacmens. Datasets without provenance will not be merged,
 which is the same standard we hold user data to.
 
 Datasets must be lawfully collected and redistributable. Do not submit scraped

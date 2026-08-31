@@ -17,7 +17,7 @@ Usage:
   python3 buyer_monitor_engagers.py --client Acme --csv "/path/to.csv" \
       --source-label "Acme Buyer Monitor"
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import csv

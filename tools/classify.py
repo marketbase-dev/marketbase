@@ -26,7 +26,7 @@ Usage:
   python3 classify.py --client Acme-AI --processor is-senior --lead-url ... --re-classify
   python3 classify.py --client Acme-AI --processor is-senior --where-tag X --dry-run
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import ast
