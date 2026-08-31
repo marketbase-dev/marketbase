@@ -3,41 +3,46 @@ License text copyright (c) 2020 MariaDB Corporation Ab, All Rights Reserved.
 
 Parameters
 
-Licensor:             Impact 11
-Licensed Work:        MarketBase Version 0.1.0 or later.
-                      The Licensed Work is (c) 2026 Impact 11.
+Licensor:             Impact 11, LLC
+Licensed Work:        MarketBase. The Licensed Work is (c) 2026 Impact 11, LLC.
 Additional Use Grant: You may make production use of the Licensed Work,
-                      including commercial use inside your own organization
-                      and on behalf of your own clients, provided that You
-                      may not offer the Licensed Work to third parties on a
-                      hosted, managed, or embedded basis in order to compete
-                      with Impact 11's paid version(s) of the Licensed Work.
+                      including use for commercial purposes within your own
+                      organization and on behalf of your own clients,
+                      provided that You may not offer the Licensed Work, or
+                      any derivative work of it, to third parties on a
+                      hosted, managed, or embedded basis as a product or
+                      service whose value derives substantially from the
+                      capabilities of the Licensed Work.
 
-                      A "competitive offering" is a Product that is offered
-                      to third parties on a paid basis, including through
-                      paid support arrangements, that significantly overlaps
-                      with the capabilities of Impact 11's paid version(s) of
-                      the Licensed Work. If Your Product is not a competitive
-                      offering when You first make it generally available, it
-                      will not become a competitive offering later due to
-                      Impact 11 releasing a new version of the Licensed Work
-                      with additional capabilities. Products that are not
-                      provided on a paid basis are not competitive.
+                      For clarity, the following ARE permitted:
 
-                      "Product" means software that is offered to end users
-                      to manage go-to-market data, or to store, enrich,
-                      qualify, or route prospect records.
+                      - Running the Licensed Work to operate your own
+                        go-to-market motion, at any scale.
+                      - Running the Licensed Work to operate a client's
+                        go-to-market motion as part of a consulting or
+                        services engagement.
+                      - Internal deployment, modification, and self-hosting.
+                      - Distributing modifications under this same License.
 
-                      Running the Licensed Work to operate your own
-                      go-to-market motion, or a client's, is expressly
-                      permitted and is not a competitive offering.
+                      The following are NOT permitted:
 
-Change Date:          2030-08-31
+                      - Offering the Licensed Work to third parties as a
+                        hosted or managed service.
+                      - Embedding the Licensed Work in a product offered to
+                        third parties where it supplies a substantial part
+                        of that product's go-to-market data functionality.
+                      - Reselling access to a deployment of the Licensed
+                        Work.
+
+                      "Go-to-market data functionality" means storing,
+                      enriching, deduplicating, qualifying, or routing
+                      prospect, lead, account, or company records.
+
+Change Date:          Four years from the date the Licensed Work is
+                      published.
 
 Change License:       Apache License, Version 2.0
 
-For information about alternative licensing arrangements for the Licensed Work,
-please contact licensing@hashicorp.com.
 
 Notice
 

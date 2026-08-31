@@ -2,4 +2,4 @@
 
 Everyone below has signed the [CLA](CLA.md).
 
-- Impact 11 (project maintainers)
+- Impact 11 (Impact 11, LLC) - project maintainers

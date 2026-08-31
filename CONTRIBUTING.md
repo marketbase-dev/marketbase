@@ -48,10 +48,12 @@ MarketBase is licensed under the [Business Source License 1.1](LICENSE), which
 converts to Apache 2.0 four years after each release.
 
 Because MarketBase is dual-licensed (BUSL for everyone, plus commercial licenses
-sold by Impact 11), we need to hold the rights to your contribution in order to
-license it under both. **All contributors must sign the
-[Contributor License Agreement](CLA.md) before their first pull request is
-merged.** You keep the copyright in your work. You grant us the right to license
+sold by Impact 11, LLC, LLC), we need to hold the rights to your contribution in order to
+license it under both. **Submitting a pull request constitutes acceptance of the
+[Contributor License Agreement](CLA.md).** It also asks you not to assert
+patents against the project and not to sue us over our commercial licensing of
+your work. Add your name to `CONTRIBUTORS.md` in your first PR so the record is
+explicit. You keep the copyright in your work. You grant us the right to license
 it alongside the rest of the project.
 
 This is the same arrangement used by Grafana, Mattermost, and most
