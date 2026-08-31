@@ -49,11 +49,18 @@ jobs:
         run: |
           for f in tools/*.py tools/lib/*.py; do python3 -m py_compile "$f"; done
 
-      - name: Migrations apply cleanly, and are idempotent
-        env:
-          PGPASSWORD: postgres
+      - name: Install psycopg
+        run: pip install --quiet "psycopg[binary]"
+
+      - name: Migrations apply cleanly
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
-          for f in schema/0*.sql; do psql "$MARKETBASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"; done
-          echo "--- re-running to prove idempotency ---"
-          for f in schema/0*.sql; do psql "$MARKETBASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"; done
+          python3 tools/apply_schema.py | tee /tmp/first.log
+          grep -q "MARKETBASE_APPLIED=$(ls schema/*.sql | wc -l | tr -d ' ')" /tmp/first.log
+
+      - name: Second run is a no-op
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          python3 tools/apply_schema.py | tee /tmp/second.log
+          grep -q "MARKETBASE_APPLIED=0" /tmp/second.log \
+            || { echo "Second run applied migrations again; tracking is broken."; exit 1; }
