@@ -28,7 +28,7 @@ CLI:
   python3 engager_pool_fetcher.py --client Acme-AI \\
       --all-tagged-ptl [--refresh] [--limit 50]
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

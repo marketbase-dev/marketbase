@@ -26,7 +26,7 @@ Usage:
   python3 sync_conversations.py --client Acme \\
     --lead-url https://… --chat-id <provider_chat_id>   # skips discovery
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import concurrent.futures

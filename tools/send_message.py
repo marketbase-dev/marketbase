@@ -29,7 +29,7 @@ Usage:
   python3 send_message.py --client Acme --lead-url https://… \
     --text "..." --dry-run
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import os

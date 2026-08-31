@@ -36,7 +36,7 @@ Usage:
 Apollo API keys are pulled from environment (`APOLLO_API_KEY*`).
 The skill (marketbase-discover-candidates-via-referrer/SKILL.md) wraps this.
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

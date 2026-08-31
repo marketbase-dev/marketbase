@@ -1,6 +1,6 @@
--- MarketBase schema, migration 016 — Saved-report documenacmen fields
+-- MarketBase schema, migration 016 — Saved-report documentation fields
 --
--- Extends `saved_reports` with structured documenacmen so every report
+-- Extends `saved_reports` with structured documentation so every report
 -- explains itself:
 --
 --   column_definitions   — per-column metadata (description + which process produced the value)

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS processes (
     version         text NOT NULL,                    -- e.g. '2026-05-acme-ai', '1.0', '2026-06-acme-ai-v2'
     process_type    text NOT NULL,                    -- 'qualifier' | 'researcher' | 'reporter' | 'pipeline' | 'enricher'
 
-    -- Documenacmen
+    -- Documentation
     description     text,                             -- one-line summary (extracted from yaml_spec)
     yaml_spec       text NOT NULL,                    -- the full YAML — canonical source of truth
     inputs          jsonb,                            -- extracted for queryability: {fields_consulted, depends_on_processes, …}

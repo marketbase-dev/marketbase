@@ -16,7 +16,7 @@ Usage:
   python3 run_report.py --client Acme-AI --name top-engagers \
     --notes "Preparing 2026-06 outreach batch"
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

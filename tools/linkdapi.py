@@ -15,7 +15,7 @@ Auth: header `X-linkdapi-apikey: <LINKDAPI_API_KEY>` (NOT x-api-key / Bearer —
 those 401). Cloudflare blocks non-browser UAs, so a browser User-Agent is
 required or every request 403s with "error code: 1010".
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import json
 import os

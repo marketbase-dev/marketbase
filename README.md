@@ -133,7 +133,7 @@ marketbase export --campaign q3_outbound --format csv
 ```
 
 You do not need to know what a data warehouse is to use MarketBase. Postgres is
-an implemenacmen detail.
+an implementation detail.
 
 ## Datasets
 
@@ -141,7 +141,7 @@ MarketBase also publishes open, well-structured GTM datasets under the same
 schema, so you can load them straight into your instance.
 
 Each dataset ships with a `manifest.json` recording where it came from, when it
-was collected, its license, and its known limiacmens. Provenance is the whole
+was collected, its license, and its known limitations. Provenance is the whole
 point of this project, and that applies to our own data too.
 
 | Dataset | Description | Status |
@@ -253,3 +253,41 @@ real and worth being precise about.
 
 Datasets in `datasets/` are licensed separately under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), not BUSL.
+
+## Running more than one MarketBase
+
+Most people run one. Agencies and consultancies run one per client. Both are
+first-class.
+
+An instance is a name mapped to a Postgres database. Same schema, same tools,
+same commands. Credentials resolve per instance, so one Infisical project can
+hold every client's connection string without collision:
+
+```
+ACME_MARKETBASE_URL        ->  falls back to  MARKETBASE_URL
+Infisical /acme/...        ->  falls back to  Infisical /...
+```
+
+```bash
+python3 -c "import sys;sys.path.insert(0,'tools');from lib import instances;\
+  instances.register('acme', 'Acme Corp')"
+
+MARKETBASE_INSTANCE=acme python3 tools/qualify_cohort.py
+# or per command:  --instance acme
+```
+
+Instance names and metadata live in `~/.marketbase/instances.json`.
+**Credentials never do.**
+
+### Already running gtmdb?
+
+gtmdb and MarketBase are the same schema with the same migration filenames, so
+an existing gtmdb database is already a valid MarketBase instance. There is no
+data migration:
+
+```bash
+./scripts/migrate_from_gtmdb.sh Acme ~/.env.Acme
+```
+
+This verifies the schema, registers the instance, and tells you where to put the
+credential. It writes nothing to your database.

@@ -20,7 +20,7 @@ Usage:
     --as-view v_thought_leader_engager_report_named \
     --purpose "Per-leader engager-persona tally; refreshed 2026-05-25"
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import sys

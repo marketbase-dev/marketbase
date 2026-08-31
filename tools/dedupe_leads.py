@@ -24,7 +24,7 @@ Usage:
   python3 dedupe_leads.py --client Acme --execute      # commit the merge
   python3 dedupe_leads.py --client Acme --limit 20     # first 20 groups
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import sys

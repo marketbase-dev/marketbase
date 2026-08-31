@@ -24,7 +24,7 @@ Usage:
       --csv ".../webhook-logs-acme-2026-08-12.csv" \
       [--batch-tag webhook:2026-08-12] [--dry-run]
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import csv

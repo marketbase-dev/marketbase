@@ -19,7 +19,7 @@ Usage:
   python3 recover_comments_freshdata.py --client Acme --poster john-roe \
       --source-label "Initrode Security (competitor)"
 """
-from __future__ import annoacmens
+from __future__ import annotations
 
 import argparse
 import json
