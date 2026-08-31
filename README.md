@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg">
+  <img alt="License" src="https://img.shields.io/badge/license-BUSL--1.1-blue.svg">
   <img alt="Postgres" src="https://img.shields.io/badge/postgres-14%2B-336791.svg">
   <img alt="Status" src="https://img.shields.io/badge/status-alpha-orange.svg">
 </p>
@@ -230,4 +230,22 @@ MarketBase instances without any code change. See `tools/lib/secrets.py`.
 
 ## License
 
-[Apache 2.0](LICENSE). Use it commercially, fork it, build on it.
+[Business Source License 1.1](LICENSE).
+
+**You can use MarketBase commercially.** Run it inside your own company, run it
+for your clients, modify it, self-host it, build on it. That is all expressly
+permitted and always free.
+
+**One restriction:** you may not offer MarketBase to third parties as a hosted,
+managed, or embedded product that competes with Impact 11's paid version.
+
+**It becomes Apache 2.0 on 2030-08-31.** Every version converts to a fully
+permissive open source license four years after release, and that date is
+written into the license itself, not left to our discretion.
+
+BUSL is a *source available* license, not an OSI-approved open source license.
+We say "source available" rather than "open source" because the distinction is
+real and worth being precise about.
+
+Datasets in `datasets/` are licensed separately under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), not BUSL.
