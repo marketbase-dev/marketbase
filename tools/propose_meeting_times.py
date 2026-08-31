@@ -47,7 +47,7 @@ Usage:
         [--duration-min 30]
         [--show-all]                   # show full ranked list, not just top N
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import json
@@ -128,7 +128,7 @@ def classify_event(ev: dict) -> str:
     return "unknown"
 
 
-def fetch_shimon_events(start_utc: datetime, end_utc: datetime) -> list[CalEvent]:
+def fetch_dana_events(start_utc: datetime, end_utc: datetime) -> list[CalEvent]:
     base = os.environ.get("UNIPILE_BASE_SERVER")
     token = os.environ.get("UNIPILE_ACCESS_TOKEN")
     if not base or not token:
@@ -180,7 +180,7 @@ def weekend_days_for(country: str | None) -> set[int]:
     return {5, 6}       # Sat, Sun (default)
 
 
-def is_shimon_blocked(slot_jrm: datetime) -> bool:
+def is_dana_blocked(slot_jrm: datetime) -> bool:
     """Friday after 13:00 IDT + all Saturday = blocked for Dana."""
     wd = slot_jrm.weekday()
     if wd == 5:  # Saturday
@@ -210,7 +210,7 @@ def score_slot(slot_jrm: datetime, slot_prospect: datetime,
     # === Hard filters ===
     if slot_jrm.hour < 7 or slot_jrm.hour >= 23:
         return SlotScore(0, ["outside Dana allowed (7-23 IDT)"], excluded=True)
-    if is_shimon_blocked(slot_jrm):
+    if is_dana_blocked(slot_jrm):
         return SlotScore(0, ["Dana weekend (Fri >=1pm IDT or Sat)"], excluded=True)
     if slot_prospect.hour < prospect_allowed[0] or slot_prospect.hour >= prospect_allowed[1]:
         return SlotScore(0, [f"outside prospect allowed "
@@ -355,7 +355,7 @@ def main() -> int:
     min_start_utc = now_utc + timedelta(hours=args.min_hours_out)
     end_utc = now_utc + timedelta(days=args.days_ahead)
 
-    events = fetch_shimon_events(now_utc, end_utc)
+    events = fetch_dana_events(now_utc, end_utc)
     print(f"Fetched {len(events)} Dana events in next {args.days_ahead} days.",
           file=sys.stderr)
 
@@ -398,8 +398,8 @@ def main() -> int:
     p_tz_label = args.prospect_tz.split("/")[-1].upper()
     for i, (sj, sp, sc) in enumerate(scored[:show_n], 1):
         prospect_str = sp.strftime(f"%a %b %d, %-I:%M %p {p_tz_label}")
-        shimon_str = sj.strftime("%-I:%M %p IDT")
-        print(f"  {i}. {prospect_str}  (= {shimon_str})")
+        dana_str = sj.strftime("%-I:%M %p IDT")
+        print(f"  {i}. {prospect_str}  (= {dana_str})")
         print(f"     Score: {sc.score:.0f}")
         for note in sc.notes:
             print(f"       {note}")

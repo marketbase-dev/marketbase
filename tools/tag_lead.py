@@ -19,7 +19,7 @@ Usage:
   # Remove a tag
   python3 tag_lead.py --client Acme-AI --lead-url https://… --tag old-status --remove
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import csv
@@ -47,7 +47,7 @@ NOTES_ALLOWLIST: dict[str, tuple[bool, str]] = {
     "flag:meeting_not_attended":    (True,  "<meeting date/time> — <cause> (e.g. 'Jun 11 2pm WIB — invite undelivered, landed in spam')"),
     "flag:possible_consultant":     (True,  "<firm> — consulting/integrator/MSP; possible consultant/partner not direct buyer; verify ICP fit"),
     "flag:security_vendor":         (True,  "<firm> — security product vendor; employee not a direct-buyer ICP"),
-    "flag:awaiting_shimon_decision": (True, "<the decision Dana must make> — <one-line context>; clear once decided (replace with the resulting qual:/plan:)"),
+    "flag:awaiting_dana_decision": (True, "<the decision Dana must make> — <one-line context>; clear once decided (replace with the resulting qual:/plan:)"),
 }
 
 

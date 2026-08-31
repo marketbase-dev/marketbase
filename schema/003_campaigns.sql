@@ -2,7 +2,7 @@
 
 -- ── campaigns ─────────────────────────────────────────────────────────────
 -- Convention: name follows <owner>_<persona>_<channel>_<yyyy_mm>
---   e.g. 'shimon_ciso_dripify_2026_05', 'engaged_with_mythos_cloud_security_2026_05'
+--   e.g. 'dana_ciso_dripify_2026_05', 'engaged_with_northwind_cloud_security_2026_05'
 
 DO $$ BEGIN
     CREATE TYPE campaign_channel AS ENUM (
@@ -19,7 +19,7 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS campaigns (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    name          text UNIQUE NOT NULL,                -- e.g. 'shimon_ciso_dripify_2026_05'
+    name          text UNIQUE NOT NULL,                -- e.g. 'dana_ciso_dripify_2026_05'
     description   text,
     channel       campaign_channel NOT NULL,
     status        campaign_status NOT NULL DEFAULT 'draft',

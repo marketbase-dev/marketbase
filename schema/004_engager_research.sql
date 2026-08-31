@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS posts (
     raw_data            jsonb,
     last_scraped_at     timestamptz,
     is_on_topic         boolean,                        -- from keyword-verification step
-    off_topic_reason    text                            -- e.g. 'no_mythos_keyword', 'group_post'
+    off_topic_reason    text                            -- e.g. 'no_northwind_keyword', 'group_post'
 );
 
 CREATE INDEX IF NOT EXISTS idx_posts_poster      ON posts(poster_linkedin_url);

@@ -29,7 +29,7 @@ Skips leads that already have a current-version signal row unless
 --refresh. Idempotent — ON CONFLICT DO UPDATE on (lead_id, enricher_name,
 enricher_version).
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import csv

@@ -61,7 +61,7 @@ Usage:
         [--top N]                    # default unlimited
         [--csv /tmp/queue.csv]       # also dump as CSV
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import csv

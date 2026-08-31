@@ -133,7 +133,7 @@ marketbase export --campaign q3_outbound --format csv
 ```
 
 You do not need to know what a data warehouse is to use MarketBase. Postgres is
-an implementation detail.
+an implemenacmen detail.
 
 ## Datasets
 
@@ -141,7 +141,7 @@ MarketBase also publishes open, well-structured GTM datasets under the same
 schema, so you can load them straight into your instance.
 
 Each dataset ships with a `manifest.json` recording where it came from, when it
-was collected, its license, and its known limitations. Provenance is the whole
+was collected, its license, and its known limiacmens. Provenance is the whole
 point of this project, and that applies to our own data too.
 
 | Dataset | Description | Status |

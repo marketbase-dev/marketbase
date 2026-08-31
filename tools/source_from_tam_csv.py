@@ -18,7 +18,7 @@ For a CSV of target companies (Company, Employees, Website, ...):
 
 Usage:
   python3 source_from_tam_csv.py --client Acme \
-      --csv "<path>" --source-tag "Copperhelm_TAM_Top200_v1 - Backup Pool" \
+      --csv "<path>" --source-tag "Acme_TAM_Top200_v1 - Backup Pool" \
       [--min-employees 1000] [--keywords "CISO,Cloud Security,Head of Security,VP Security"] \
       [--max-pages 4] [--limit N] [--no-upsert] [--no-apollo]
 
@@ -178,13 +178,13 @@ def slugify(name: str) -> str:
     return re.sub(r"\s+", "-", s)
 
 
-def candidate_slugs(company, website, gtmdb_by_name):
+def candidate_slugs(company, website, marketbase_by_name):
     """Prioritized candidate LinkedIn slugs to try, with provenance label."""
     cands = []
     nm = norm(company)
-    for (gname, slug, sid, emp) in gtmdb_by_name.get(nm, []):
+    for (gname, slug, sid, emp) in marketbase_by_name.get(nm, []):
         if slug and not slug.startswith("unknown") and "/" not in slug:
-            cands.append((slug, "gtmdb_slug"))
+            cands.append((slug, "marketbase_slug"))
     dr = domain_root(website)
     if dr:
         cands.append((dr, "domain_root"))
@@ -209,15 +209,15 @@ def _accept(p, method, csv_emp, min_emp):
     # like "up"=1199 for Union Pacific=30336 even though both clear 1000).
     if emp >= min_emp and (not csv_emp or 0.15 <= emp / max(csv_emp, 1) <= 7):
         return p, method
-    if emp == 0 and method in ("domain_root", "gtmdb_slug", "apollo_domain"):
+    if emp == 0 and method in ("domain_root", "marketbase_slug", "apollo_domain"):
         return p, method + "_nosizemaybe"
     return None, None
 
 
-def resolve(company, website, csv_emp, min_emp, gtmdb_by_name, use_apollo=True):
+def resolve(company, website, csv_emp, min_emp, marketbase_by_name, use_apollo=True):
     """Try candidate slugs in priority order, then Apollo domain-enrich as fallback.
     Returns (profile_dict, method) or (None, 'unresolved')."""
-    for cand, method in candidate_slugs(company, website, gtmdb_by_name):
+    for cand, method in candidate_slugs(company, website, marketbase_by_name):
         p = company_profile(cand)
         if not p.get("id"):
             continue
@@ -315,23 +315,23 @@ def main():
     resolved, unresolved = [], []
 
     # ===== SOURCE COMPANIES FROM MarketBase (already resolved) — no CSV, no Apollo =====
-    if args.from_gtmdb_tag:
+    if args.from_marketbase_tag:
         cur.execute("""SELECT name, linkedin_slug, saleleads_id FROM companies
                        WHERE saleleads_id IS NOT NULL AND raw_data->'source_tags' ? %s
-                       ORDER BY employee_count DESC NULLS LAST""", (args.from_gtmdb_tag,))
+                       ORDER BY employee_count DESC NULLS LAST""", (args.from_marketbase_tag,))
         for n, slug, sid in cur.fetchall():
             resolved.append({"name": n, "slug": slug, "id": str(sid),
                              "linkedin_url": "", "website": "", "industry": "",
-                             "emp": None, "emp_range": "", "method": "gtmdb_tag"})
+                             "emp": None, "emp_range": "", "method": "marketbase_tag"})
         if args.limit:
             resolved = resolved[:args.limit]
-        print(f"== Loaded {len(resolved)} resolved companies from MarketBase tag '{args.from_gtmdb_tag}' ==", flush=True)
+        print(f"== Loaded {len(resolved)} resolved companies from MarketBase tag '{args.from_marketbase_tag}' ==", flush=True)
 
-    if not args.from_gtmdb_tag:
+    if not args.from_marketbase_tag:
       cur.execute("SELECT name, linkedin_slug, saleleads_id, employee_count FROM companies WHERE name IS NOT NULL")
-      gtmdb_by_name = {}
+      marketbase_by_name = {}
       for n, slug, sid, emp in cur.fetchall():
-        gtmdb_by_name.setdefault(norm(n), []).append((n, slug, sid, emp))
+        marketbase_by_name.setdefault(norm(n), []).append((n, slug, sid, emp))
 
       rows = list(csv.DictReader(open(args.csv)))
       if args.limit:
@@ -345,7 +345,7 @@ def main():
         except Exception:
             csv_emp = 0
         website = r.get("Website") or r.get("website") or ""
-        p, method = resolve(company, website, csv_emp, args.min_employees, gtmdb_by_name,
+        p, method = resolve(company, website, csv_emp, args.min_employees, marketbase_by_name,
                             use_apollo=not args.no_apollo)
         if p:
             p["csv_company"] = company; p["method"] = method

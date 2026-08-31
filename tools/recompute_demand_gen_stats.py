@@ -28,7 +28,7 @@ CLI:
   # Dry-run: show before/after diffs, don't write
   python3 recompute_demand_gen_stats.py --client Acme-AI --dry-run --limit 10
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import csv

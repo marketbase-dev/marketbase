@@ -11,10 +11,10 @@ history, so it can't populate current_company. The CURRENT POSITION lives behind
 Skips leads that already have a current_company unless --refresh.
 
 Usage:
-  python3 fill_current_position.py --client Acme --where-tag copperhelm_engager_persona_queued
+  python3 fill_current_position.py --client Acme --where-tag acme_engager_persona_queued
   python3 fill_current_position.py --client Acme --lead-file leads.csv --refresh
 """
-from __future__ import annotations
+from __future__ import annoacmens
 import argparse, sys, csv as _csv
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed

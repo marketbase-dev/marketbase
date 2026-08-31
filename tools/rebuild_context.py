@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate gtmdb_CONTEXT_<Client>.md inside the customer's GTM folder.
+"""Regenerate marketbase_CONTEXT_<Client>.md inside the customer's GTM folder.
 
 Bundle contents (intentionally lean — anything queryable on demand is OUT):
   1. Header (client + DB host + generated_at + inputs_hash footer at bottom)
@@ -13,7 +13,7 @@ Usage:
   python3 rebuild_context.py --all
   python3 rebuild_context.py --client Acme --force   # ignore hash match
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import hashlib
@@ -27,10 +27,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import connect, database_url, load_client_env  # noqa: E402
 
 
-GTMDB_ROOT = Path(__file__).resolve().parent
+MARKETBASE_ROOT = Path(__file__).resolve().parent
 SKILLS_ROOT = Path.home() / ".claude" / "skills"
-CONVENTIONS = GTMDB_ROOT / "CONVENTIONS.md"
-SCHEMA_DIR = GTMDB_ROOT / "schema"
+CONVENTIONS = MARKETBASE_ROOT / "CONVENTIONS.md"
+SCHEMA_DIR = MARKETBASE_ROOT / "schema"
 CUSTOMERS_ROOT = Path(
     "<your-documents-root>/"
     "My Drive/Impact11/Customers and Partners"
@@ -73,7 +73,7 @@ def client_gtm_dir(client: str) -> Path:
 
 
 def bundle_path(client: str) -> Path:
-    return client_gtm_dir(client) / f"gtmdb_CONTEXT_{client}.md"
+    return client_gtm_dir(client) / f"marketbase_CONTEXT_{client}.md"
 
 
 def discover_clients() -> list[str]:
@@ -342,7 +342,7 @@ def render_bundle(client: str) -> str:
 
 def notify_swan_context_update(client: str) -> None:
     """POST an empty JSON body to SEQUENCER_CONTEXT_UPDATE_WEBHOOK_URL (if set in
-    `~/.env.<Client>`) after a successful gtmdb_CONTEXT rebuild.
+    `~/.env.<Client>`) after a successful marketbase_CONTEXT rebuild.
 
     Reads the URL from `load_client_env(client)`'s RETURN dict (not
     os.environ) so we get the per-client value — `os.environ.setdefault`

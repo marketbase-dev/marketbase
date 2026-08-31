@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """MarketBase pending-decisions report
 
-List every lead currently carrying `flag:awaiting_shimon_decision` — the leads
+List every lead currently carrying `flag:awaiting_dana_decision` — the leads
 whose next strategic move (pursue / route / pass, edge-case persona, etc.) is
 Dana's to decide, not the outreach skill's. For each one it prints a clean,
 Dana-ready brief: who they are, the decision needed, the full conversation,
 and the proposed reply parked in `campaign_members.notes`.
 
-This is the read side of the `flag:awaiting_shimon_decision` convention (see
+This is the read side of the `flag:awaiting_dana_decision` convention (see
 CONVENTIONS.md). The write side lives in `acme-propose-reply` (it tags the
 flag + parks the draft when it hits a Dana-decision lead).
 
@@ -15,7 +15,7 @@ Usage:
   set -a; source ~/.env.Acme; set +a
   python3 pending_decisions_report.py --client Acme
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import sys
@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import connect
 
-FLAG = "flag:awaiting_shimon_decision"
+FLAG = "flag:awaiting_dana_decision"
 
 
 def fetch(conn):
@@ -72,7 +72,7 @@ def fetch(conn):
 
 def render(rows) -> str:
     if not rows:
-        return "No leads currently carry `flag:awaiting_shimon_decision`. Nothing pending for Dana."
+        return "No leads currently carry `flag:awaiting_dana_decision`. Nothing pending for Dana."
 
     lines = [f"# Pending decisions for Dana — {len(rows)} lead(s)\n"]
     for i, r in enumerate(rows, 1):

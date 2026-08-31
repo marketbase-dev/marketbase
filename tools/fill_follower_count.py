@@ -20,7 +20,7 @@ CLI:
       --where-tag engager:acme-ai-potential-thought-leaders-2026-06-06 \\
       --where-persona "demand gen practitioner,demand gen service provider"
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import re

@@ -36,7 +36,7 @@ Usage:
 Apollo API keys are pulled from environment (`APOLLO_API_KEY*`).
 The skill (marketbase-discover-candidates-via-referrer/SKILL.md) wraps this.
 """
-from __future__ import annotations
+from __future__ import annoacmens
 
 import argparse
 import csv
@@ -120,7 +120,7 @@ def apollo_search(org_domain: str, titles: list[str], seniorities: list[str],
     return []
 
 
-def query_gtmdb_candidates(cur, company_terms: list[str], title_kws: list[str],
+def query_marketbase_candidates(cur, company_terms: list[str], title_kws: list[str],
                            exclude_url: str | None) -> list[dict]:
     """Match leads where current_company ILIKE one of company_terms AND
     headline/title ILIKE one of title_kws.
@@ -224,11 +224,11 @@ def main() -> int:
                 [a.strip() for a in args.org_aliases.split(",")]
                 if args.org_aliases else [referrer_company]
             )
-            gtmdb_hits = query_gtmdb_candidates(
+            marketbase_hits = query_marketbase_candidates(
                 cur, company_aliases, title_kws,
                 exclude_url=normalize_linkedin_url(args.referrer_url),
             )
-            print(f"  MarketBase matches: {len(gtmdb_hits)}", flush=True)
+            print(f"  MarketBase matches: {len(marketbase_hits)}", flush=True)
 
             # 3. Apollo
             org_domain = args.org_domain or company_to_domain(referrer_company)
@@ -241,17 +241,17 @@ def main() -> int:
 
             # 4. Build dedup index from MarketBase
             # Key by (first_name_lower, last_initial_lower) when last name in MarketBase
-            gtmdb_by_first_last_init: dict[tuple[str, str], dict] = {}
-            for h in gtmdb_hits:
+            marketbase_by_first_last_init: dict[tuple[str, str], dict] = {}
+            for h in marketbase_hits:
                 first, last = parse_full_name(h["name"])
                 if first and last:
                     key = (first.lower(), last[0].lower())
-                    gtmdb_by_first_last_init[key] = h
+                    marketbase_by_first_last_init[key] = h
 
             # 5. Build output rows
             out_rows: list[dict] = []
             # MarketBase rows
-            for h in gtmdb_hits:
+            for h in marketbase_hits:
                 first, last = parse_full_name(h["name"])
                 out_rows.append({
                     "source": "MarketBase",
@@ -278,8 +278,8 @@ def main() -> int:
                 dedup_note = ""
                 if last_obf:
                     last_initial = last_obf[0].lower()
-                    if (first.lower(), last_initial) in gtmdb_by_first_last_init:
-                        match = gtmdb_by_first_last_init[(first.lower(), last_initial)]
+                    if (first.lower(), last_initial) in marketbase_by_first_last_init:
+                        match = marketbase_by_first_last_init[(first.lower(), last_initial)]
                         dedup_note = f"likely same as MarketBase row {match['name']!r}"
 
                 out_rows.append({
