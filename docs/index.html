@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MarketBase | The open source system of record for go-to-market data</title>
+<meta name="description" content="MarketBase sits between your data vendors and your sequencer. An open source Postgres schema that becomes the source of truth for your prospect data, with provenance, versioned judgment, and outcomes.">
+<meta property="og:title" content="MarketBase">
+<meta property="og:description" content="The open source system of record for go-to-market data.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://marketbase.dev">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f766e'/><path d='M22 72V28h12l16 26 16-26h12v44H66V48L50 72 34 48v24z' fill='white'/></svg>">
+<style>
+:root{
+  --bg:#fbfaf8; --panel:#ffffff; --border:#e4e2dd; --text:#16191a; --muted:#5f6769;
+  --accent:#0f766e; --accent-soft:#e6f2f0; --code-bg:#f4f3f0; --shadow:0 1px 2px rgba(0,0,0,.04);
+}
+:root:not([data-theme="light"]) { }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c0f0f; --panel:#131817; --border:#242c2b; --text:#e8ecea; --muted:#98a5a2;
+    --accent:#2dd4bf; --accent-soft:#10201e; --code-bg:#0f1514; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c0f0f; --panel:#131817; --border:#242c2b; --text:#e8ecea; --muted:#98a5a2;
+  --accent:#2dd4bf; --accent-soft:#10201e; --code-bg:#0f1514; --shadow:none;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.65 ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:920px;margin:0 auto;padding:0 24px}
+code,pre,.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+
+/* header */
+header{border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10}
+header .wrap{display:flex;align-items:center;gap:20px;height:60px}
+.brand{font-weight:650;letter-spacing:-.02em;font-size:17px;text-decoration:none;color:var(--text);margin-right:auto}
+.brand span{color:var(--accent)}
+header a.nav{color:var(--muted);text-decoration:none;font-size:14.5px}
+header a.nav:hover{color:var(--text)}
+
+/* hero */
+.hero{padding:76px 0 56px;border-bottom:1px solid var(--border)}
+h1{font-size:clamp(38px,6.5vw,58px);line-height:1.04;letter-spacing:-.035em;margin:0 0 20px;font-weight:680}
+.lede{font-size:clamp(18px,2.4vw,21px);color:var(--muted);max-width:640px;margin:0 0 14px;line-height:1.55}
+.lede strong{color:var(--text);font-weight:600}
+.tag{display:inline-block;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);
+  background:var(--accent-soft);border:1px solid var(--border);padding:5px 11px;border-radius:100px;margin-bottom:24px;font-weight:600}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+.btn{display:inline-block;padding:11px 20px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:560;border:1px solid transparent}
+.btn.primary{background:var(--accent);color:#fff}
+:root[data-theme="dark"] .btn.primary,
+:root:not([data-theme="light"]) .btn.primary{color:#06110f}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .btn.primary{color:#fff}}
+.btn.primary:hover{opacity:.9}
+.btn.ghost{border-color:var(--border);color:var(--text);background:var(--panel)}
+.btn.ghost:hover{border-color:var(--accent)}
+
+/* sections */
+section{padding:60px 0;border-bottom:1px solid var(--border)}
+h2{font-size:clamp(24px,3.4vw,31px);letter-spacing:-.025em;margin:0 0 14px;font-weight:650}
+h3{font-size:17px;margin:0 0 8px;font-weight:620;letter-spacing:-.01em}
+p{margin:0 0 16px;color:var(--muted);max-width:660px}
+p.body{color:var(--text)}
+
+/* code */
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:18px 20px;
+  overflow-x:auto;font-size:13.5px;line-height:1.7;margin:0 0 20px;color:var(--text)}
+pre .c{color:var(--muted)}
+pre .a{color:var(--accent)}
+code.inline{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1.5px 6px;font-size:.9em}
+
+/* problem list */
+ul.pain{list-style:none;padding:0;margin:0 0 8px;max-width:680px}
+ul.pain li{padding:11px 0 11px 26px;border-bottom:1px solid var(--border);position:relative;color:var(--muted);font-size:15.5px}
+ul.pain li:last-child{border-bottom:0}
+ul.pain li::before{content:"";position:absolute;left:4px;top:19px;width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:.55}
+
+/* table */
+table{width:100%;border-collapse:collapse;margin:0 0 8px;font-size:14.5px}
+th,td{text-align:left;padding:13px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+th{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td:first-child{white-space:nowrap;font-weight:580}
+td .mono{color:var(--accent);font-size:13px}
+.tscroll{overflow-x:auto}
+
+/* cards */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:16px;margin-top:8px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:var(--shadow)}
+.card p{margin:0;font-size:14.5px}
+
+/* diagram */
+.diagram{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:22px;overflow-x:auto}
+.diagram pre{background:none;border:0;padding:0;margin:0;font-size:12.5px;line-height:1.75;color:var(--muted);white-space:pre}
+.diagram pre b{color:var(--accent);font-weight:600}
+
+footer{padding:44px 0 60px}
+footer p{font-size:14px;margin:0 0 6px}
+footer a{color:var(--accent);text-decoration:none}
+footer a:hover{text-decoration:underline}
+.note{font-size:13.5px;color:var(--muted);border-left:2px solid var(--accent);padding:2px 0 2px 14px;margin:20px 0 0;max-width:640px}
+@media (max-width:640px){
+  .hero{padding:52px 0 40px}
+  section{padding:46px 0}
+  header a.nav:not(.keep){display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a class="brand" href="/">Market<span>Base</span></a>
+    <a class="nav" href="#what">What it is</a>
+    <a class="nav" href="#start">Quickstart</a>
+    <a class="nav" href="#data">Datasets</a>
+    <a class="nav keep" href="https://github.com/marketbase-dev/marketbase">GitHub</a>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="tag">Open source · Apache 2.0</div>
+    <h1>The system of record<br>for go-to-market data.</h1>
+    <p class="lede"><strong>MarketBase sits between your data vendors and your sequencer.</strong></p>
+    <p class="lede">A Postgres schema and a small toolkit that becomes the source of truth for your prospect data. Every lead knows where it came from, why you qualified it, and what happened next.</p>
+    <div class="cta">
+      <a class="btn primary" href="#start">Get started</a>
+      <a class="btn ghost" href="https://github.com/marketbase-dev/marketbase">View on GitHub</a>
+    </div>
+  </div>
+</div>
+
+<section id="problem">
+  <div class="wrap">
+    <h2>The gap nobody owns</h2>
+    <p>You buy data from Apollo, ZoomInfo, Clay, or a scraper. You send it from Outreach, Smartlead, or Lemlist. The space in between is CSVs, Zapier, and a spreadsheet somebody renamed <code class="inline">FINAL_v3</code>.</p>
+    <p>That gap is where the expensive problems live.</p>
+    <ul class="pain">
+      <li>You re-buy contacts you already paid for, because nothing remembers you bought them.</li>
+      <li>You cannot answer "why is this person on the list?" three weeks later.</li>
+      <li>You message someone at an account that already has an open deal.</li>
+      <li>Three lists disagree and nobody knows which one is real.</li>
+      <li>Someone changes the targeting rules and last month's numbers stop making sense.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="what">
+  <div class="wrap">
+    <h2>Four things, kept separate</h2>
+    <p>Every commercial GTM tool smears these together. MarketBase does not.</p>
+    <div class="tscroll">
+    <table>
+      <tr><th>Concern</th><th>Where it lives</th><th>The question it answers</th></tr>
+      <tr><td>Provenance</td><td><span class="mono">lead_sources</span></td><td>How did this lead get here?</td></tr>
+      <tr><td>Judgment</td><td><span class="mono">lead_qualifications</span></td><td>Why did we target them, under which version of the rules?</td></tr>
+      <tr><td>State</td><td><span class="mono">lead_tags</span></td><td>What is true about them right now?</td></tr>
+      <tr><td>Outcome</td><td><span class="mono">campaign_members</span></td><td>What did we do, and what happened?</td></tr>
+    </table>
+    </div>
+    <p class="note">Because judgment is versioned and stored with its full result, you can re-run last quarter's qualifier and reproduce exactly why a lead was included. Because provenance is separate from judgment, you can change your targeting rules without losing the record of where anyone came from.</p>
+  </div>
+</section>
+
+<section id="where">
+  <div class="wrap">
+    <h2>Where it fits</h2>
+    <div class="diagram">
+<pre>  Data vendors                <b>MarketBase</b>                 Execution
+  ────────────                ──────────                 ─────────
+  Apollo        ─┐                                   ┌─  Smartlead
+  ZoomInfo      ─┤    ┌───────────────────────┐      ├─  Outreach
+  Clay          ─┼──▶ │  provenance           │ ────▶├─  Lemlist
+  LinkedIn      ─┤    │  judgment (versioned) │      ├─  HubSpot
+  Your scraper  ─┘    │  state                │      └─  Your CRM
+                      │  outcome              │
+  CSV upload    ────▶ │                       │ ◀────  status written back
+                      └───────────────────────┘</pre>
+    </div>
+    <p style="margin-top:20px">MarketBase does not send anything. It does not own your sequencer, and it will not try to replace your CRM. It owns the record of who you targeted and why.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Never pay twice</h3>
+        <p>Every raw vendor response is cached before it is parsed, keyed on the API, endpoint, and normalized params. A job that dies on page 12 resumes from cache for pages 1 through 11.</p>
+      </div>
+      <div class="card">
+        <h3>Deal-aware suppression</h3>
+        <p>Deal state syncs from your CRM, so leads at accounts with an open opportunity are held back automatically instead of getting cold outbound from a rep who did not know.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <h2>Quickstart</h2>
+    <p>Requires Postgres 14 or newer. Any Postgres works: local, Neon, Supabase, RDS.</p>
+<pre><span class="c"># Clone and point at a database</span>
+git clone https://github.com/marketbase-dev/marketbase.git
+cd marketbase
+export MARKETBASE_URL=<span class="a">"postgresql://user:pass@localhost:5432/marketbase"</span>
+
+<span class="c"># Apply the schema (additive, safe to re-run)</span>
+psql "$MARKETBASE_URL" -f schema/000_bootstrap.sql
+for f in schema/0*.sql; do psql "$MARKETBASE_URL" -f "$f"; done</pre>
+    <h3 style="margin-top:28px">Start from a CSV, not a database</h3>
+    <p>Most people start with a spreadsheet. That path is first-class: point MarketBase at a CSV and get back a deduplicated list with provenance attached and suppression already applied.</p>
+<pre>marketbase import leads.csv --source apollo --label <span class="a">"Q3 ICP pull"</span>
+marketbase qualify --qualifier icp_v1
+marketbase export --campaign q3_outbound --format csv</pre>
+    <p class="note">You do not need to know what a data warehouse is to use MarketBase. Postgres is an implementation detail.</p>
+  </div>
+</section>
+
+<section id="data">
+  <div class="wrap">
+    <h2>Open datasets</h2>
+    <p>MarketBase publishes open, well-structured GTM datasets under the same schema, so they load straight into your instance.</p>
+    <p>Every dataset ships with a manifest recording where it came from, when it was collected, its license, and its known limitations. Provenance is the whole point of this project, and that applies to our own data too.</p>
+    <div class="tscroll">
+    <table>
+      <tr><th>Dataset</th><th>Description</th><th>Status</th></tr>
+      <tr><td><span class="mono">source-types</span></td><td>Canonical taxonomy of GTM lead-discovery methods</td><td>Planned</td></tr>
+      <tr><td><span class="mono">disqualifier-rules</span></td><td>Reusable exclusion rules: competitors, out of geo, vendor employees</td><td>Planned</td></tr>
+      <tr><td><span class="mono">campaign-taxonomy</span></td><td>Naming conventions and status models for outbound campaigns</td><td>Planned</td></tr>
+    </table>
+    </div>
+  </div>
+</section>
+
+<section id="plugin">
+  <div class="wrap">
+    <h2>Drive it from Claude Code</h2>
+    <p>The repository is also a Claude Code plugin, so you can run the whole pipeline conversationally.</p>
+<pre>/plugin marketplace add marketbase-dev/marketbase
+/plugin install marketbase@marketbase</pre>
+    <div class="tscroll">
+    <table>
+      <tr><th>Command</th><th>What it does</th></tr>
+      <tr><td><span class="mono">/marketbase:init</span></td><td>Provision a database and apply the schema</td></tr>
+      <tr><td><span class="mono">/marketbase:source</span></td><td>Ingest leads from a vendor or CSV, recording provenance</td></tr>
+      <tr><td><span class="mono">/marketbase:qualify</span></td><td>Run a versioned qualifier over a cohort</td></tr>
+      <tr><td><span class="mono">/marketbase:stage</span></td><td>Stage qualified leads into a campaign</td></tr>
+    </table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><strong>MarketBase</strong> is open source under <a href="https://github.com/marketbase-dev/marketbase/blob/main/LICENSE">Apache 2.0</a>.</p>
+    <p><a href="https://github.com/marketbase-dev/marketbase">GitHub</a> · <a href="https://github.com/marketbase-dev/marketbase/blob/main/CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/marketbase-dev/marketbase/issues">Issues</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
