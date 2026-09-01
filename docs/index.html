@@ -3,393 +3,271 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MarketBase | Your entire GTM context in one place</title>
-<meta name="description" content="MarketBase is a free, cross-agent go-to-market database. Every list, enrichment and campaign in one Postgres instance you own: versioned, cached so you never enrich twice, and read and written by your whole team and every agent they use.">
+<title>MarketBase | For everything your CRM won't hold</title>
+<meta name="description" content="A free, cross-agent go-to-market database. Every enrichment, list, tag, score and signal in one Postgres you own, so you never pay or run the same thing twice.">
 <meta property="og:title" content="MarketBase">
-<meta property="og:description" content="One GTM database your whole team and every agent works from. Free, cross-agent, runs on your own Postgres.">
+<meta property="og:description" content="For everything your CRM won't hold. Free, cross-agent, runs on your own Postgres.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://marketbase.dev">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f766e'/><path d='M22 72V28h12l16 26 16-26h12v44H66V48L50 72 34 48v24z' fill='white'/></svg>">
 <style>
-:root{
-  --bg:#fbfaf8; --panel:#ffffff; --border:#e4e2dd; --text:#16191a; --muted:#5f6769;
-  --accent:#0f766e; --accent-soft:#e6f2f0; --code-bg:#f4f3f0; --shadow:0 1px 2px rgba(0,0,0,.04);
-}
-:root:not([data-theme="light"]) { }
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#0c0f0f; --panel:#131817; --border:#242c2b; --text:#e8ecea; --muted:#98a5a2;
-    --accent:#2dd4bf; --accent-soft:#10201e; --code-bg:#0f1514; --shadow:none;
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#0c0f0f; --panel:#131817; --border:#242c2b; --text:#e8ecea; --muted:#98a5a2;
-  --accent:#2dd4bf; --accent-soft:#10201e; --code-bg:#0f1514; --shadow:none;
-}
+:root{--bg:#fbfaf8;--panel:#fff;--border:#e4e2dd;--text:#16191a;--muted:#5f6769;
+  --accent:#0f766e;--accent-soft:#e6f2f0;--code-bg:#f4f3f0;--good:#0f766e;--bad:#a1543a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c0f0f;--panel:#131817;--border:#242c2b;--text:#e8ecea;--muted:#98a5a2;
+  --accent:#2dd4bf;--accent-soft:#10201e;--code-bg:#0f1514;--good:#2dd4bf;--bad:#e8a087}}
+:root[data-theme="dark"]{--bg:#0c0f0f;--panel:#131817;--border:#242c2b;--text:#e8ecea;--muted:#98a5a2;
+  --accent:#2dd4bf;--accent-soft:#10201e;--code-bg:#0f1514;--good:#2dd4bf;--bad:#e8a087}
 *{box-sizing:border-box}
-body{
-  margin:0; background:var(--bg); color:var(--text);
-  font:16px/1.65 ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
-  -webkit-font-smoothing:antialiased;
-}
-.wrap{max-width:920px;margin:0 auto;padding:0 24px}
+body{margin:0;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;
+  font:16px/1.65 ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
 code,pre,.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
-
-
-/* architecture diagram */
-.arch{margin:34px 0 8px}
-.arch-grid{display:grid;gap:12px;grid-template-columns:1fr minmax(200px,1.15fr) 1fr;
-  grid-template-areas:"top top top" "src core out" "base base base";align-items:stretch}
-.node{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
-.node h4{margin:0 0 3px;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:650}
-.node .byo{font-size:11px;color:var(--accent);font-weight:600;letter-spacing:.02em}
-.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
-.chip{font:500 11.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text);
-  background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:5px 7px;white-space:nowrap}
-.chip.more{color:var(--muted);border-style:dashed}
-.n-top{grid-area:top}.n-src{grid-area:src}.n-out{grid-area:out}.n-base{grid-area:base}
-.n-core{grid-area:core;background:var(--accent-soft);border:1.5px solid var(--accent);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:22px 16px}
-.n-core .mark{font-size:19px;font-weight:700;letter-spacing:-.02em;color:var(--text)}
-.n-core .mark span{color:var(--accent)}
-.n-core .sub{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.45}
-.n-core .pill{margin-top:11px;font:600 10.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.07em;
-  text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:99px;padding:5px 9px}
-.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media (max-width:760px){
-  .arch-grid{grid-template-columns:1fr;grid-template-areas:"top" "src" "core" "out" "base"}
-  .split{grid-template-columns:1fr}
-}
-.arch-note{font-size:13px;color:var(--muted);margin:14px 0 0;max-width:660px}
-
-/* header */
-header{border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10}
+a{color:inherit}
+header{border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:20}
 header .wrap{display:flex;align-items:center;gap:20px;height:60px}
-.brand{font-weight:650;letter-spacing:-.02em;font-size:17px;text-decoration:none;color:var(--text);margin-right:auto}
+.brand{font-weight:650;letter-spacing:-.02em;font-size:17px;text-decoration:none;margin-right:auto}
 .brand span{color:var(--accent)}
 header a.nav{color:var(--muted);text-decoration:none;font-size:14.5px}
 header a.nav:hover{color:var(--text)}
-
-/* hero */
-.hero{padding:76px 0 56px;border-bottom:1px solid var(--border)}
-h1{font-size:clamp(38px,6.5vw,58px);line-height:1.04;letter-spacing:-.035em;margin:0 0 20px;font-weight:680}
-.lede{font-size:clamp(18px,2.4vw,21px);color:var(--muted);max-width:640px;margin:0 0 14px;line-height:1.55}
+h1{font-size:clamp(34px,4.6vw,50px);line-height:1.05;letter-spacing:-.035em;margin:0 0 20px;font-weight:680}
+h2{font-size:clamp(23px,3vw,30px);letter-spacing:-.025em;margin:0 0 14px;font-weight:650}
+h3{font-size:16.5px;margin:0 0 6px;font-weight:620;letter-spacing:-.01em}
+p{margin:0 0 16px;color:var(--muted)}
+.tag{display:inline-block;font:600 12px/1 ui-monospace,Menlo,monospace;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--accent);background:var(--accent-soft);
+  border:1px solid var(--border);padding:6px 11px;border-radius:99px;margin-bottom:22px}
+/* hero split */
+.hero{padding:56px 0 52px;border-bottom:1px solid var(--border)}
+.hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start}
+.lede{font-size:17.5px;color:var(--muted);line-height:1.6;margin:0 0 18px}
 .lede strong{color:var(--text);font-weight:600}
-.tag{display:inline-block;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);
-  background:var(--accent-soft);border:1px solid var(--border);padding:5px 11px;border-radius:100px;margin-bottom:24px;font-weight:600}
-.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
-.btn{display:inline-block;padding:11px 20px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:560;border:1px solid transparent}
+.bens{list-style:none;padding:0;margin:26px 0 0;display:grid;gap:16px}
+.bens li{display:grid;grid-template-columns:26px 1fr;gap:12px;align-items:start;
+  font-size:14.8px;color:var(--muted);line-height:1.55}
+.bens b{color:var(--text);font-weight:600}
+.bic{width:26px;height:26px;border-radius:7px;background:var(--accent-soft);
+  border:1px solid var(--border);display:grid;place-items:center}
+.bic svg{width:14px;height:14px;stroke:var(--accent);fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+.btn{display:inline-block;padding:11px 20px;border-radius:8px;text-decoration:none;
+  font-size:15px;font-weight:560;border:1px solid transparent}
 .btn.primary{background:var(--accent);color:#fff}
-:root[data-theme="dark"] .btn.primary,
-:root:not([data-theme="light"]) .btn.primary{color:#06110f}
-@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .btn.primary{color:#fff}}
-.btn.primary:hover{opacity:.9}
-.btn.ghost{border-color:var(--border);color:var(--text);background:var(--panel)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.primary{color:#06110f}}
+:root[data-theme="dark"] .btn.primary{color:#06110f}
+.btn.ghost{border-color:var(--border);background:var(--panel)}
 .btn.ghost:hover{border-color:var(--accent)}
-
-/* sections */
-section{padding:60px 0;border-bottom:1px solid var(--border)}
-h2{font-size:clamp(24px,3.4vw,31px);letter-spacing:-.025em;margin:0 0 14px;font-weight:650}
-h3{font-size:17px;margin:0 0 8px;font-weight:620;letter-spacing:-.01em}
-p{margin:0 0 16px;color:var(--muted);max-width:660px}
-p.body{color:var(--text)}
-
-/* code */
-pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:18px 20px;
-  overflow-x:auto;font-size:13.5px;line-height:1.7;margin:0 0 20px;color:var(--text)}
-pre .c{color:var(--muted)}
-pre .a{color:var(--accent)}
-code.inline{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1.5px 6px;font-size:.9em}
-
-/* problem list */
-ul.pain{list-style:none;padding:0;margin:0 0 8px;max-width:680px}
-ul.pain li{padding:11px 0 11px 26px;border-bottom:1px solid var(--border);position:relative;color:var(--muted);font-size:15.5px}
-ul.pain li:last-child{border-bottom:0}
-ul.pain li::before{content:"";position:absolute;left:4px;top:19px;width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:.55}
-
-/* table */
-table{width:100%;border-collapse:collapse;margin:0 0 8px;font-size:14.5px}
-th,td{text-align:left;padding:13px 14px;border-bottom:1px solid var(--border);vertical-align:top}
-th{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
-td:first-child{white-space:nowrap;font-weight:580}
-td .mono{color:var(--accent);font-size:13px}
-.tscroll{overflow-x:auto}
-
-/* cards */
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:16px;margin-top:8px}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:var(--shadow)}
-.card p{margin:0;font-size:14.5px}
-
 /* diagram */
-.diagram{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:22px;overflow-x:auto}
-.diagram pre{background:none;border:0;padding:0;margin:0;font-size:12.5px;line-height:1.75;color:var(--muted);white-space:pre}
-.diagram pre b{color:var(--accent);font-weight:600}
-
-footer{padding:44px 0 60px}
+.arch{display:grid;gap:0}
+.tier{display:grid;gap:10px}
+.tier-2{grid-template-columns:1fr 1fr}
+.node{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:12px 13px}
+.node h4{margin:0 0 8px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);font-weight:650}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;
+  background:var(--code-bg);border:1px solid var(--border);border-radius:6px;padding:4px 7px;white-space:nowrap}
+.ico{width:12px;height:12px;flex:0 0 12px;display:block}
+.ico.mono{display:grid;place-items:center;border-radius:3px;background:var(--accent);
+  color:var(--bg);font:700 8px/1 ui-monospace,Menlo,monospace;opacity:.85}
+.flow{height:16px;display:grid;place-items:center}
+.flow span{width:1px;height:16px;background:var(--border);position:relative}
+.flow span::after{content:"";position:absolute;left:-3px;bottom:0;width:7px;height:7px;
+  border-right:1px solid var(--border);border-bottom:1px solid var(--border);transform:rotate(45deg)}
+.node.core{background:var(--accent-soft);border:1.5px solid var(--accent);text-align:center;padding:18px 14px}
+.core .mark{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.core .mark span{color:var(--accent)}
+.core .pill{margin-top:8px;font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--accent)}
+/* sections */
+section{padding:56px 0;border-bottom:1px solid var(--border)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:22px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px}
+.panel h3{display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:15px}
+.panel ul{list-style:none;padding:0;margin:0;display:grid;gap:11px}
+.panel li{display:grid;grid-template-columns:17px 1fr;gap:10px;font-size:14.5px;color:var(--muted);line-height:1.5}
+.panel li svg{width:15px;height:15px;margin-top:4px;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.is li svg{stroke:var(--good)} .isnt li svg{stroke:var(--bad)}
+/* prompts */
+.qa{display:grid;gap:14px;margin-top:24px;grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.q{padding:14px 17px;border-bottom:1px solid var(--border);font-size:14.5px;font-weight:600;
+  display:flex;gap:9px;align-items:flex-start}
+.q::before{content:"You";flex:0 0 auto;font:600 10px/1.6 ui-monospace,Menlo,monospace;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.a{padding:14px 17px;font-size:13.6px;color:var(--muted);line-height:1.62;display:flex;gap:9px;align-items:flex-start}
+.a::before{content:"MB";flex:0 0 auto;font:600 10px/1.6 ui-monospace,Menlo,monospace;
+  letter-spacing:.06em;color:var(--accent);padding-top:2px}
+.a b{color:var(--text);font-weight:600}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:17px 19px;
+  overflow-x:auto;font-size:13.4px;line-height:1.7;margin:0 0 18px;color:var(--text)}
+pre .c{color:var(--muted)}
+code.inline{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1.5px 6px;font-size:.9em}
+footer{padding:42px 0 58px}
 footer p{font-size:14px;margin:0 0 6px}
 footer a{color:var(--accent);text-decoration:none}
-footer a:hover{text-decoration:underline}
-.note{font-size:13.5px;color:var(--muted);border-left:2px solid var(--accent);padding:2px 0 2px 14px;margin:20px 0 0;max-width:640px}
-@media (max-width:640px){
-  .hero{padding:52px 0 40px}
-  section{padding:46px 0}
+@media (max-width:900px){
+  .hero-grid{grid-template-columns:1fr;gap:36px}
+  .two{grid-template-columns:1fr}
   header a.nav:not(.keep){display:none}
+  .hero{padding:40px 0 40px}section{padding:42px 0}
 }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="wrap">
-    <a class="brand" href="/">Market<span>Base</span></a>
-    <a class="nav" href="#why">What it does</a>
-    <a class="nav" href="#start">Quickstart</a>
-    <a class="nav" href="#data">Datasets</a>
-    <a class="nav keep" href="https://github.com/marketbase-dev/marketbase">GitHub</a>
-  </div>
-</header>
+<header><div class="wrap">
+  <a class="brand" href="/">Market<span>Base</span></a>
+  <a class="nav" href="#isnt">What it is</a>
+  <a class="nav" href="#ask">Ask it</a>
+  <a class="nav" href="#start">Quickstart</a>
+  <a class="nav keep" href="https://github.com/marketbase-dev/marketbase">GitHub</a>
+</div></header>
 
-<div class="hero">
-  <div class="wrap">
-    <div class="tag">Free · Cross-agent · Runs on your Postgres</div>
-    <h1>Never pay twice for<br>the same data.</h1>
-    <p class="lede">One database for every list, every enrichment, and every campaign. <strong>Yours</strong>, on your own Postgres, with your own API keys.</p>
-    <p class="lede">Your whole team works from it, and so does every agent they use. Same data, same context, whichever tool is holding the keyboard.</p>
+<div class="hero"><div class="wrap"><div class="hero-grid">
+  <div>
+    <div class="tag">Free · Cross-agent · Your Postgres</div>
+    <h1>For everything your<br>CRM won't hold.</h1>
+    <p class="lede">Every enrichment, every list, every tag, every score and classification, every
+      signal. Your CRM shouldn't hold these. Neither should your local disk or a folder in Drive.</p>
+    <p class="lede"><strong>One Postgres you own.</strong> Your whole team works from it, and so does
+      every agent they use.</p>
+    <ul class="bens">
+      <li><span class="bic"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span>
+        <span><b>Never pay or run the same thing twice.</b> Every enrichment and scrape result is kept, keyed on the call that produced it.</span></li>
+      <li><span class="bic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+        <span><b>Know when data has gone stale.</b> Re-run it when it has, and keep the previous results so you can diff the two.</span></li>
+      <li><span class="bic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span>
+        <span><b>Re-run anything, on purpose.</b> Imports, score calculations, view creations and exports are all tracked and repeatable.</span></li>
+    </ul>
     <div class="cta">
       <a class="btn primary" href="#start">Get started</a>
       <a class="btn ghost" href="https://github.com/marketbase-dev/marketbase">View on GitHub</a>
     </div>
-
-  <div class="arch">
-    <div class="arch-grid">
-
-      <div class="node n-top">
-        <div class="split">
-          <div>
-            <h4>Your database <span class="byo">· bring your own</span></h4>
-            <div class="chips">
-              <span class="chip">Postgres</span><span class="chip">Neon</span>
-              <span class="chip">Supabase</span><span class="chip">RDS</span><span class="chip">local</span>
-            </div>
-          </div>
-          <div>
-            <h4>Your keys <span class="byo">· bring your own</span></h4>
-            <div class="chips">
-              <span class="chip">Infisical</span><span class="chip">1Password</span>
-              <span class="chip">Doppler</span><span class="chip">.env</span>
-            </div>
-          </div>
+  </div>
+  <div>
+      <div class="arch">
+        <div class="tier tier-2">
+          <div class="node"><h4>Your database</h4><div class="chips"><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4169E1" d="M23.5594 14.7228a.5269.5269 0 0 0-.0563-.1191c-.139-.2632-.4768-.3418-1.0074-.2321-1.6533.3411-2.2935.1312-2.5256-.0191 1.342-2.0482 2.445-4.522 3.0411-6.8297.2714-1.0507.7982-3.5237.1222-4.7316a1.5641 1.5641 0 0 0-.1509-.235C21.6931.9086 19.8007.0248 17.5099.0005c-1.4947-.0158-2.7705.3461-3.1161.4794a9.449 9.449 0 0 0-.5159-.0816 8.044 8.044 0 0 0-1.3114-.1278c-1.1822-.0184-2.2038.2642-3.0498.8406-.8573-.3211-4.7888-1.645-7.2219.0788C.9359 2.1526.3086 3.8733.4302 6.3043c.0409.818.5069 3.334 1.2423 5.7436.4598 1.5065.9387 2.7019 1.4334 3.582.553.9942 1.1259 1.5933 1.7143 1.7895.4474.1491 1.1327.1441 1.8581-.7279.8012-.9635 1.5903-1.8258 1.9446-2.2069.4351.2355.9064.3625 1.39.3772a.0569.0569 0 0 0 .0004.0041 11.0312 11.0312 0 0 0-.2472.3054c-.3389.4302-.4094.5197-1.5002.7443-.3102.064-1.1344.2339-1.1464.8115-.0025.1224.0329.2309.0919.3268.2269.4231.9216.6097 1.015.6331 1.3345.3335 2.5044.092 3.3714-.6787-.017 2.231.0775 4.4174.3454 5.0874.2212.5529.7618 1.9045 2.4692 1.9043.2505 0 .5263-.0291.8296-.0941 1.7819-.3821 2.5557-1.1696 2.855-2.9059.1503-.8707.4016-2.8753.5388-4.1012.0169-.0703.0357-.1207.057-.1362.0007-.0005.0697-.0471.4272.0307a.3673.3673 0 0 0 .0443.0068l.2539.0223.0149.001c.8468.0384 1.9114-.1426 2.5312-.4308.6438-.2988 1.8057-1.0323 1.5951-1.6698zM2.371 11.8765c-.7435-2.4358-1.1779-4.8851-1.2123-5.5719-.1086-2.1714.4171-3.6829 1.5623-4.4927 1.8367-1.2986 4.8398-.5408 6.108-.13-.0032.0032-.0066.0061-.0098.0094-2.0238 2.044-1.9758 5.536-1.9708 5.7495-.0002.0823.0066.1989.0162.3593.0348.5873.0996 1.6804-.0735 2.9184-.1609 1.1504.1937 2.2764.9728 3.0892.0806.0841.1648.1631.2518.2374-.3468.3714-1.1004 1.1926-1.9025 2.1576-.5677.6825-.9597.5517-1.0886.5087-.3919-.1307-.813-.5871-1.2381-1.3223-.4796-.839-.9635-2.0317-1.4155-3.5126zm6.0072 5.0871c-.1711-.0428-.3271-.1132-.4322-.1772.0889-.0394.2374-.0902.4833-.1409 1.2833-.2641 1.4815-.4506 1.9143-1.0002.0992-.126.2116-.2687.3673-.4426a.3549.3549 0 0 0 .0737-.1298c.1708-.1513.2724-.1099.4369-.0417.156.0646.3078.26.3695.4752.0291.1016.0619.2945-.0452.4444-.9043 1.2658-2.2216 1.2494-3.1676 1.0128zm2.094-3.988-.0525.141c-.133.3566-.2567.6881-.3334 1.003-.6674-.0021-1.3168-.2872-1.8105-.8024-.6279-.6551-.9131-1.5664-.7825-2.5004.1828-1.3079.1153-2.4468.079-3.0586-.005-.0857-.0095-.1607-.0122-.2199.2957-.2621 1.6659-.9962 2.6429-.7724.4459.1022.7176.4057.8305.928.5846 2.7038.0774 3.8307-.3302 4.7363-.084.1866-.1633.3629-.2311.5454zm7.3637 4.5725c-.0169.1768-.0358.376-.0618.5959l-.146.4383a.3547.3547 0 0 0-.0182.1077c-.0059.4747-.054.6489-.115.8693-.0634.2292-.1353.4891-.1794 1.0575-.11 1.4143-.8782 2.2267-2.4172 2.5565-1.5155.3251-1.7843-.4968-2.0212-1.2217a6.5824 6.5824 0 0 0-.0769-.2266c-.2154-.5858-.1911-1.4119-.1574-2.5551.0165-.5612-.0249-1.9013-.3302-2.6462.0044-.2932.0106-.5909.019-.8918a.3529.3529 0 0 0-.0153-.1126 1.4927 1.4927 0 0 0-.0439-.208c-.1226-.4283-.4213-.7866-.7797-.9351-.1424-.059-.4038-.1672-.7178-.0869.067-.276.1831-.5875.309-.9249l.0529-.142c.0595-.16.134-.3257.213-.5012.4265-.9476 1.0106-2.2453.3766-5.1772-.2374-1.0981-1.0304-1.6343-2.2324-1.5098-.7207.0746-1.3799.3654-1.7088.5321a5.6716 5.6716 0 0 0-.1958.1041c.0918-1.1064.4386-3.1741 1.7357-4.4823a4.0306 4.0306 0 0 1 .3033-.276.3532.3532 0 0 0 .1447-.0644c.7524-.5706 1.6945-.8506 2.802-.8325.4091.0067.8017.0339 1.1742.081 1.939.3544 3.2439 1.4468 4.0359 2.3827.8143.9623 1.2552 1.9315 1.4312 2.4543-1.3232-.1346-2.2234.1268-2.6797.779-.9926 1.4189.543 4.1729 1.2811 5.4964.1353.2426.2522.4522.2889.5413.2403.5825.5515.9713.7787 1.2552.0696.087.1372.1714.1885.245-.4008.1155-1.1208.3825-1.0552 1.717-.0123.1563-.0423.4469-.0834.8148-.0461.2077-.0702.4603-.0994.7662zm.8905-1.6211c-.0405-.8316.2691-.9185.5967-1.0105a2.8566 2.8566 0 0 0 .135-.0406 1.202 1.202 0 0 0 .1342.103c.5703.3765 1.5823.4213 3.0068.1344-.2016.1769-.5189.3994-.9533.6011-.4098.1903-1.0957.333-1.7473.3636-.7197.0336-1.0859-.0807-1.1721-.151zm.5695-9.2712c-.0059.3508-.0542.6692-.1054 1.0017-.055.3576-.112.7274-.1264 1.1762-.0142.4368.0404.8909.0932 1.3301.1066.887.216 1.8003-.2075 2.7014a3.5272 3.5272 0 0 1-.1876-.3856c-.0527-.1276-.1669-.3326-.3251-.6162-.6156-1.1041-2.0574-3.6896-1.3193-4.7446.3795-.5427 1.3408-.5661 2.1781-.463zm.2284 7.0137a12.3762 12.3762 0 0 0-.0853-.1074l-.0355-.0444c.7262-1.1995.5842-2.3862.4578-3.4385-.0519-.4318-.1009-.8396-.0885-1.2226.0129-.4061.0666-.7543.1185-1.0911.0639-.415.1288-.8443.1109-1.3505.0134-.0531.0188-.1158.0118-.1902-.0457-.4855-.5999-1.938-1.7294-3.253-.6076-.7073-1.4896-1.4972-2.6889-2.0395.5251-.1066 1.2328-.2035 2.0244-.1859 2.0515.0456 3.6746.8135 4.8242 2.2824a.908.908 0 0 1 .0667.1002c.7231 1.3556-.2762 6.2751-2.9867 10.5405zm-8.8166-6.1162c-.025.1794-.3089.4225-.6211.4225a.5821.5821 0 0 1-.0809-.0056c-.1873-.026-.3765-.144-.5059-.3156-.0458-.0605-.1203-.178-.1055-.2844.0055-.0401.0261-.0985.0925-.1488.1182-.0894.3518-.1226.6096-.0867.3163.0441.6426.1938.6113.4186zm7.9305-.4114c.0111.0792-.049.201-.1531.3102-.0683.0717-.212.1961-.4079.2232a.5456.5456 0 0 1-.075.0052c-.2935 0-.5414-.2344-.5607-.3717-.024-.1765.2641-.3106.5611-.352.297-.0414.6111.0088.6356.1851z"/></svg>Postgres</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#00E599" d="M24 0V24l-9.365-8.045V24H0V0ZM2.942 21.087h8.751V9.563l9.365 8.204V2.919L2.942 2.914Z"/></svg>Neon</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#3FCF8E" d="M11.9 1.036c-.015-.986-1.26-1.41-1.874-.637L.764 12.05C-.33 13.427.65 15.455 2.409 15.455h9.579l.113 7.51c.014.985 1.259 1.408 1.873.636l9.262-11.653c1.093-1.375.113-3.403-1.645-3.403h-9.642z"/></svg>Supabase</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#527FFF" d="M1.463.857 5.446 4.84l-.606.606L.857 1.463v3.251H0V.43A.43.43 0 0 1 .429 0h4.285v.857ZM24 .43v4.285h-.857v-3.25l-3.983 3.98-.606-.606L22.537.857h-3.251V0h4.285c.237 0 .429.192.429.429Zm-.857 18.857H24v4.285a.428.428 0 0 1-.429.429h-4.285v-.857h3.25l-3.982-3.983.606-.606 3.983 3.983Zm-.214-7.623c0-1.423-1.643-2.828-4.393-3.76l.274-.811c3.162 1.07 4.976 2.736 4.976 4.57 0 1.836-1.814 3.502-4.976 4.572l-.275-.812c2.751-.931 4.394-2.336 4.394-3.76Zm-21.834 0c0 1.363 1.538 2.73 4.113 3.66l-.291.806C1.944 15.057.238 13.43.238 11.664S1.944 8.27 4.917 7.197l.291.806c-2.575.93-4.113 2.297-4.113 3.66Zm4.35 7.497-3.982 3.983h3.251V24H.43a.428.428 0 0 1-.43-.429v-4.285h.857v3.25l3.983-3.982ZM12 8.265c-3.063 0-4.714-.79-4.714-1.114 0-.323 1.651-1.114 4.714-1.114 3.062 0 4.714.79 4.714 1.114 0 .323-1.652 1.114-4.714 1.114Zm.012 3.32c-2.932 0-4.726-.801-4.726-1.237V8.265c1.055.582 2.928.858 4.714.858 1.786 0 3.659-.276 4.714-.858v2.083c0 .436-1.785 1.237-4.702 1.237Zm0 3.272c-2.932 0-4.726-.8-4.726-1.237v-2.108c1.042.613 2.89.93 4.726.93 1.827 0 3.664-.317 4.702-.928v2.106c0 .437-1.785 1.237-4.702 1.237ZM12 17.793c-3.05 0-4.714-.82-4.714-1.24v-1.768c1.042.612 2.89.93 4.726.93 1.827 0 3.664-.317 4.702-.928v1.765c0 .422-1.664 1.241-4.714 1.241ZM12 5.18c-2.683 0-5.571.616-5.571 1.971v9.401c0 1.378 2.802 2.099 5.571 2.099 2.769 0 5.571-.721 5.571-2.099v-9.4c0-1.356-2.888-1.972-5.571-1.972Z"/></svg>RDS</span></div></div>
+          <div class="node"><h4>Your keys &amp; secrets</h4><div class="chips"><span class="chip"><span class="ico mono">I</span>Infisical</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0094F5" d="M12 0c6.627 0 12 5.373 12 12 0 6.628-5.373 12-12 12S0 18.628 0 12C0 5.373 5.373 0 12 0m-.893 4.86c-.485 0-.727.001-.913.095a.87.87 0 0 0-.378.379c-.094.185-.095.428-.095.912v2.747c0 .12 0 .182.016.238q.02.075.065.138a1 1 0 0 0 .175.162l.695.564c.113.092.17.139.19.194a.22.22 0 0 1 0 .15c-.02.056-.077.102-.19.194l-.695.564a1 1 0 0 0-.175.162.4.4 0 0 0-.065.138 1 1 0 0 0-.016.238v6.019c0 .485 0 .728.095.913a.87.87 0 0 0 .378.378c.186.094.428.094.913.094h1.786c.485 0 .727 0 .913-.094a.87.87 0 0 0 .378-.378c.095-.185.095-.428.095-.913v-2.747c0-.12 0-.182-.016-.238a.4.4 0 0 0-.065-.138 1 1 0 0 0-.175-.162l-.695-.564c-.113-.092-.17-.138-.191-.193a.22.22 0 0 1 0-.152c.02-.055.078-.1.19-.193l.696-.564a1 1 0 0 0 .175-.162.4.4 0 0 0 .065-.138 1 1 0 0 0 .016-.238V6.246c0-.484 0-.727-.095-.912a.87.87 0 0 0-.378-.379c-.186-.094-.428-.094-.913-.094Z"/></svg>1Password</span><span class="chip"><span class="ico mono">D</span>Doppler</span><span class="chip"><span class="ico mono">.</span>.env</span></div></div>
         </div>
-      </div>
-
-      <div class="node n-src">
-        <h4>Data sources</h4>
-        <div class="chips">
-          <span class="chip">Apollo</span><span class="chip">Clay</span><span class="chip">Exa</span>
-          <span class="chip">Crustdata</span><span class="chip">Hunter</span><span class="chip">Parallel</span>
-          <span class="chip">LeadMagic</span><span class="chip">LinkedIn</span><span class="chip">CSV</span>
-          <span class="chip more">your scrapers</span>
+        <div class="flow"><span></span></div>
+        <div class="tier tier-2">
+          <div class="node"><h4>Data sources</h4><div class="chips"><span class="chip"><span class="ico mono">A</span>Apollo</span><span class="chip"><span class="ico mono">C</span>Clay</span><span class="chip"><span class="ico mono">E</span>Exa</span><span class="chip"><span class="ico mono">C</span>Crustdata</span><span class="chip"><span class="ico mono">H</span>Hunter</span><span class="chip"><span class="ico mono">L</span>LeadMagic</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0A66C2" d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</span><span class="chip"><span class="ico mono">C</span>CSV</span></div></div>
+          <div class="node"><h4>CRM &amp; campaigns</h4><div class="chips"><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FF7A59" d="M18.164 7.93V5.084a2.198 2.198 0 001.267-1.978v-.067A2.2 2.2 0 0017.238.845h-.067a2.2 2.2 0 00-2.193 2.193v.067a2.196 2.196 0 001.252 1.973l.013.006v2.852a6.22 6.22 0 00-2.969 1.31l.012-.01-7.828-6.095A2.497 2.497 0 104.3 4.656l-.012.006 7.697 5.991a6.176 6.176 0 00-1.038 3.446c0 1.343.425 2.588 1.147 3.607l-.013-.02-2.342 2.343a1.968 1.968 0 00-.58-.095h-.002a2.033 2.033 0 102.033 2.033 1.978 1.978 0 00-.1-.595l.005.014 2.317-2.317a6.247 6.247 0 104.782-11.134l-.036-.005zm-.964 9.378a3.206 3.206 0 113.215-3.207v.002a3.206 3.206 0 01-3.207 3.207z"/></svg>HubSpot</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#00A1E0" d="M10.006 5.415a4.195 4.195 0 013.045-1.306c1.56 0 2.954.9 3.69 2.205.63-.3 1.35-.45 2.1-.45 2.85 0 5.159 2.34 5.159 5.22s-2.31 5.22-5.176 5.22c-.345 0-.69-.044-1.02-.104a3.75 3.75 0 01-3.3 1.95c-.6 0-1.155-.15-1.65-.375A4.314 4.314 0 018.88 20.4a4.302 4.302 0 01-4.05-2.82c-.27.062-.54.076-.825.076-2.204 0-4.005-1.8-4.005-4.05 0-1.5.811-2.805 2.01-3.51-.255-.57-.39-1.2-.39-1.846 0-2.58 2.1-4.65 4.65-4.65 1.53 0 2.85.705 3.72 1.8"/></svg>Salesforce</span><span class="chip"><span class="ico mono">A</span>Attio</span><span class="chip"><span class="ico mono">S</span>Smartlead</span><span class="chip"><span class="ico mono">I</span>Instantly</span><span class="chip"><span class="ico mono">O</span>Outreach</span><span class="chip"><span class="ico mono">L</span>Lemlist</span></div></div>
         </div>
-      </div>
-
-      <div class="node n-core">
-        <div class="mark">Market<span>Base</span></div>
-        <div class="sub">One database for everything<br>your CRM can't hold</div>
-        <div class="pill">Free · Cross-agent</div>
-      </div>
-
-      <div class="node n-out">
-        <h4>CRM &amp; campaigns</h4>
-        <div class="chips">
-          <span class="chip">HubSpot</span><span class="chip">Salesforce</span><span class="chip">Attio</span>
-          <span class="chip">Smartlead</span><span class="chip">Instantly</span><span class="chip">Outreach</span>
-          <span class="chip">Lemlist</span><span class="chip">Mixmax</span>
+        <div class="flow"><span></span></div>
+        <div class="node core">
+          <div class="mark">Market<span>Base</span></div>
+          <div class="pill">Free · Cross-agent · Your Postgres</div>
         </div>
-      </div>
-
-      <div class="node n-base">
-        <h4>Your team, their tools, and your agents</h4>
-        <div class="chips">
-          <span class="chip">Claude Code</span><span class="chip">Cursor</span><span class="chip">ChatGPT</span>
-          <span class="chip">n8n</span><span class="chip">Zapier</span><span class="chip">psql</span>
-          <span class="chip">Python</span><span class="chip more">whatever comes next</span>
+        <div class="flow"><span></span></div>
+        <div class="tier tier-2">
+          <div class="node"><h4>Your team &amp; their AI</h4><div class="chips"><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#D97757" d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg>Claude</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#6E56CF" d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"/></svg>Cursor</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#007ACC" d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg>VS Code</span></div></div>
+          <div class="node"><h4>Automation frameworks</h4><div class="chips"><span class="chip"><span class="ico mono">O</span>OpenClaw</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#EA4B71" d="M21.4737 5.6842c-1.1772 0-2.1663.8051-2.4468 1.8947h-2.8955c-1.235 0-2.289.893-2.492 2.111l-.1038.623a1.263 1.263 0 0 1-1.246 1.0555H11.289c-.2805-1.0896-1.2696-1.8947-2.4468-1.8947s-2.1663.8051-2.4467 1.8947H4.973c-.2805-1.0896-1.2696-1.8947-2.4468-1.8947C1.1311 9.4737 0 10.6047 0 12s1.131 2.5263 2.5263 2.5263c1.1772 0 2.1663-.8051 2.4468-1.8947h1.4223c.2804 1.0896 1.2696 1.8947 2.4467 1.8947 1.1772 0 2.1663-.8051 2.4468-1.8947h1.0008a1.263 1.263 0 0 1 1.2459 1.0555l.1038.623c.203 1.218 1.257 2.111 2.492 2.111h.3692c.2804 1.0895 1.2696 1.8947 2.4468 1.8947 1.3952 0 2.5263-1.131 2.5263-2.5263s-1.131-2.5263-2.5263-2.5263c-1.1772 0-2.1664.805-2.4468 1.8947h-.3692a1.263 1.263 0 0 1-1.246-1.0555l-.1037-.623A2.52 2.52 0 0 0 13.9607 12a2.52 2.52 0 0 0 .821-1.4794l.1038-.623a1.263 1.263 0 0 1 1.2459-1.0555h2.8955c.2805 1.0896 1.2696 1.8947 2.4468 1.8947 1.3952 0 2.5263-1.131 2.5263-2.5263s-1.131-2.5263-2.5263-2.5263m0 1.2632a1.263 1.263 0 0 1 1.2631 1.2631 1.263 1.263 0 0 1-1.2631 1.2632 1.263 1.263 0 0 1-1.2632-1.2632 1.263 1.263 0 0 1 1.2632-1.2631M2.5263 10.7368A1.263 1.263 0 0 1 3.7895 12a1.263 1.263 0 0 1-1.2632 1.2632A1.263 1.263 0 0 1 1.2632 12a1.263 1.263 0 0 1 1.2631-1.2632m6.3158 0A1.263 1.263 0 0 1 10.1053 12a1.263 1.263 0 0 1-1.2632 1.2632A1.263 1.263 0 0 1 7.579 12a1.263 1.263 0 0 1 1.2632-1.2632m10.1053 3.7895a1.263 1.263 0 0 1 1.2631 1.2632 1.263 1.263 0 0 1-1.2631 1.2631 1.263 1.263 0 0 1-1.2632-1.2631 1.263 1.263 0 0 1 1.2632-1.2632"/></svg>n8n</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FF4F00" d="M4.157 0A4.151 4.151 0 0 0 0 4.161v15.678A4.151 4.151 0 0 0 4.157 24h15.682A4.152 4.152 0 0 0 24 19.839V4.161A4.152 4.152 0 0 0 19.839 0H4.157Zm10.61 8.761h.03a.577.577 0 0 1 .23.038.585.585 0 0 1 .201.124.63.63 0 0 1 .162.431.612.612 0 0 1-.162.435.58.58 0 0 1-.201.128.58.58 0 0 1-.23.042.529.529 0 0 1-.235-.042.585.585 0 0 1-.332-.328.559.559 0 0 1-.038-.235.613.613 0 0 1 .17-.431.59.59 0 0 1 .405-.162Zm2.853 1.572c.03.004.061.004.095.004.325-.011.646.064.937.219.238.144.431.355.552.609.128.279.189.582.185.888v.193a2 2 0 0 1 0 .219h-2.498c.003.227.075.45.204.642a.78.78 0 0 0 .646.265.714.714 0 0 0 .484-.136.642.642 0 0 0 .23-.318l.915.257a1.398 1.398 0 0 1-.28.537c-.14.159-.321.284-.521.355a2.234 2.234 0 0 1-.836.136 1.923 1.923 0 0 1-1.001-.245 1.618 1.618 0 0 1-.665-.703 2.221 2.221 0 0 1-.227-1.036 1.95 1.95 0 0 1 .48-1.398 1.9 1.9 0 0 1 1.3-.488Zm-9.607.023c.162.004.325.026.48.079.207.065.4.174.563.314.26.302.393.692.366 1.088v2.276H8.53l-.109-.711h-.065c-.064.163-.155.31-.272.439a1.122 1.122 0 0 1-.374.264 1.023 1.023 0 0 1-.453.083 1.334 1.334 0 0 1-.866-.264.965.965 0 0 1-.329-.801.993.993 0 0 1 .076-.431 1.02 1.02 0 0 1 .242-.363 1.478 1.478 0 0 1 1.043-.303h.952v-.181a.696.696 0 0 0-.136-.454.553.553 0 0 0-.438-.154.695.695 0 0 0-.378.086.48.48 0 0 0-.193.254l-.99-.144a1.26 1.26 0 0 1 .257-.563c.14-.174.321-.302.533-.378.261-.091.54-.136.82-.129.053-.003.106-.007.163-.007Zm4.384.007c.174 0 .347.038.506.114.182.083.34.211.458.374.257.423.377.911.351 1.406a2.53 2.53 0 0 1-.355 1.448 1.148 1.148 0 0 1-1.009.517c-.204 0-.401-.045-.582-.136a1.052 1.052 0 0 1-.48-.457 1.298 1.298 0 0 1-.114-.234h-.045l.004 1.784h-1.059v-4.713h.904l.117.805h.057c.068-.208.177-.401.328-.56a1.129 1.129 0 0 1 .843-.344h.076v-.004Zm7.559.084h.903l.113.805h.053a1.37 1.37 0 0 1 .235-.484.813.813 0 0 1 .313-.242.82.82 0 0 1 .39-.076h.234v1.051h-.401a.662.662 0 0 0-.313.008.623.623 0 0 0-.272.155.663.663 0 0 0-.174.26.683.683 0 0 0-.027.314v1.875h-1.054v-3.666Zm-17.515.003h3.262v.896L3.73 13.104l.034.113h1.973l.042.9H2.4v-.9l1.931-1.754-.045-.117H2.441v-.896Zm11.815 0h1.055v3.659h-1.055V10.45Zm3.443.684.019.016a.69.69 0 0 0-.351.045.756.756 0 0 0-.287.204c-.11.155-.174.336-.189.522h1.545c-.034-.526-.257-.787-.74-.787h.003Zm-5.718.163c-.026 0-.057 0-.083.004a.78.78 0 0 0-.31.053.746.746 0 0 0-.257.189 1.016 1.016 0 0 0-.204.695v.064c-.015.257.057.507.204.711a.634.634 0 0 0 .253.196.638.638 0 0 0 .314.061.644.644 0 0 0 .578-.265c.14-.223.204-.48.189-.74a1.216 1.216 0 0 0-.181-.711.677.677 0 0 0-.503-.257Zm-4.509 1.266a.464.464 0 0 0-.268.102.373.373 0 0 0-.114.276c0 .053.008.106.027.155a.375.375 0 0 0 .087.132.576.576 0 0 0 .397.11v.004a.863.863 0 0 0 .563-.182.573.573 0 0 0 .211-.457v-.14h-.903Z"/></svg>Zapier</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#6D00CC" d="M13.38 3.498c-.27 0-.511.19-.566.465L9.85 18.986a.578.578 0 0 0 .453.678l4.095.826a.58.58 0 0 0 .682-.455l2.963-15.021a.578.578 0 0 0-.453-.678l-4.096-.826a.589.589 0 0 0-.113-.012zm-5.876.098a.576.576 0 0 0-.516.318L.062 17.697a.575.575 0 0 0 .256.774l3.733 1.877a.578.578 0 0 0 .775-.258l6.926-13.781a.577.577 0 0 0-.256-.776L7.762 3.658a.571.571 0 0 0-.258-.062zm11.74.115a.576.576 0 0 0-.576.576v15.426c0 .318.258.578.576.578h4.178a.58.58 0 0 0 .578-.578V4.287a.578.578 0 0 0-.578-.576Z"/></svg>Make</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#1C3C3C" d="M13.796 0a6.93 6.93 0 0 0-4.91 2.019L5.451 5.455l3.273 3.27 3.432-3.432a2.284 2.284 0 0 1 3.277 0 2.28 2.28 0 0 1 0 3.275L12 12.001l3.273 3.273 3.433-3.435c2.692-2.692 2.692-7.127 0-9.82A6.92 6.92 0 0 0 13.796 0m-5.07 8.728-3.433 3.434c-2.692 2.693-2.692 7.126 0 9.819A6.92 6.92 0 0 0 10.203 24a6.93 6.93 0 0 0 4.911-2.02l3.432-3.432-3.271-3.272-3.433 3.433a2.284 2.284 0 0 1-3.277 0 2.28 2.28 0 0 1 0-3.276L12 12z"/></svg>LangChain</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FF5A50" d="M12.482.18C7.161 1.319 1.478 9.069 1.426 15.372c-.051 5.527 3.1 8.68 8.68 8.627 6.716-.05 14.259-6.87 12.09-10.9-.672-1.292-1.396-1.344-2.687-.207-1.602 1.395-1.654.31-.207-2.893 1.757-3.98 1.705-5.322-.31-7.544C17.03.388 14.962-.388 12.482.181Zm5.322 2.068c2.273 2.015 2.376 4.236.465 8.42-1.395 3.1-2.17 3.515-3.824 1.86-1.24-1.24-1.343-3.46-.258-6.044 1.137-2.635.982-3.1-.568-1.653-3.72 3.358-6.458 9.765-5.424 12.503.464 1.189.825 1.395 2.737 1.395 2.79 0 6.303-1.705 7.957-3.926 1.756-2.274 2.79-2.274 2.79-.052 0 3.875-6.459 8.627-11.625 8.627-6.251 0-9.351-4.752-7.491-11.47.878-2.995 4.443-7.904 7.077-9.66 3.255-2.17 5.684-2.17 8.164 0z"/></svg>CrewAI</span><span class="chip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#3776AB" d="M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z"/></svg>Python</span></div></div>
         </div>
-      </div>
-
+      </div>  </div>
+</div></div></div>
+<section id="isnt"><div class="wrap">
+  <h2>What MarketBase is, and isn't</h2>
+  <p>It is a schema and a toolkit, not a service. There is nothing to host and nothing to run.</p>
+  <div class="two">
+    <div class="panel is">
+      <h3><svg viewBox="0 0 24 24" style="width:17px;height:17px;fill:none;stroke:var(--good);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6 9 17l-5-5"/></svg> What it is</h3>
+      <ul>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>A Postgres schema you point at a database you already have</span></li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>A toolkit that runs with your own API keys, billed to you</span></li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>Shared state: every agent and teammate reads and writes the same rows, so work done in one tool is context in the next</span></li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>Free, and source available under BUSL, converting to Apache 2.0</span></li>
+      </ul>
     </div>
-    <p class="arch-note">MarketBase is a schema and a toolkit, not a service. There is nothing to host and nothing to
-    run: you point it at a Postgres you already have, with your own API keys. Every agent and every teammate reads and
-    writes the same rows, so work done in one tool is context in the next. Nothing routes through us, because there is
-    no us to route through.</p>
-  </div>
-  </div>
-</div>
-
-<section id="story">
-  <div class="wrap">
-    <h2>You know this one</h2>
-    <p class="body" style="font-size:17px;max-width:640px">
-      You run message v1 on audience v1. Then message v2 on audience v1. Then message v3
-      on audience v1.1. Somewhere past that point it stops being possible to say what ran
-      on whom.</p>
-    <p>Six months later the questions arrive and none of them have answers. What were the
-      search filters for this list? Did it come from Apollo, or Storeleads, or Sumble, and
-      when? Is it still fresh? Where is the prompt that filled in that column? Did we
-      already pay to enrich these people for another client?</p>
-    <p>The answers existed. They were in a Clay table, an n8n run, a CSV in someone's
-      Drive, and a spreadsheet called <code class="inline">final_v3_USE_THIS</code>. None of
-      those places was built to remember, so nothing did.</p>
-  </div>
-</section>
-
-<section id="why">
-  <div class="wrap">
-    <h2>What MarketBase does about it</h2>
-    <div class="grid">
-      <div class="card">
-        <h3>Never enrich twice</h3>
-        <p>Every paid API response is cached before it is parsed, keyed on the call and its
-        params. Re-runs, new pipelines, other clients, and bug fixes all read from cache.
-        You see exactly what you spent and on what.</p>
-      </div>
-      <div class="card">
-        <h3>Somewhere to put everything else</h3>
-        <p>Your CRM only wants clean records, so everything else ends up in CSVs, docs and
-        links. Keep it here instead: raw pulls, half-qualified lists, research, transcripts.
-        Promote to the CRM only what is real.</p>
-      </div>
-      <div class="card">
-        <h3>Every list knows where it came from</h3>
-        <p>Source, filters, export date, and the prompt that produced each field, stored
-        with the rows. So "where did this come from" is a query, not an archaeology project.</p>
-      </div>
-      <div class="card">
-        <h3>Change one thing without redoing everything</h3>
-        <p>ICP rules, filters, prompts and audiences are versioned alongside the results
-        they produced. Tweak a rule and you get a new version, not a rebuild from scratch.</p>
-      </div>
-      <div class="card">
-        <h3>Campaign status in one place</h3>
-        <p>Who was messaged, from which tool, at which step, and what came back. Held
-        together across every sending tool instead of scattered between them.</p>
-      </div>
-      <div class="card">
-        <h3>One store, every client</h3>
-        <p>Run an instance per client, all on the same schema and tools. Competitor
-        research and battle cards are built once and reused, instead of redone per
-        engagement.</p>
-      </div>
+    <div class="panel isnt">
+      <h3><svg viewBox="0 0 24 24" style="width:17px;height:17px;fill:none;stroke:var(--bad);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round"><path d="M18 6 6 18M6 6l12 12"/></svg> What it isn't</h3>
+      <ul>
+        <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Not a data vendor. It ships no contact data and resells you nothing</span></li>
+        <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Not a CRM, and not trying to replace one</span></li>
+        <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Not a sequencer. It sends nothing on your behalf</span></li>
+        <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Not a routing layer. Nothing passes through us, because there is no us to pass through</span></li>
+      </ul>
     </div>
   </div>
-</section>
+</div></section>
 
-<section id="what">
-  <div class="wrap">
-    <h2>Context, not just records</h2>
-    <p>Storing rows is easy. MarketBase also stores how each lead got here and why you decided what you decided, which is what makes the context worth sharing. Four concerns, kept separate.</p>
-    <div class="tscroll">
-    <table>
-      <tr><th>Concern</th><th>Where it lives</th><th>The question it answers</th></tr>
-      <tr><td>Provenance</td><td><span class="mono">lead_sources</span></td><td>How did this lead get here?</td></tr>
-      <tr><td>Judgment</td><td><span class="mono">lead_qualifications</span></td><td>Why did we target them, under which version of the rules?</td></tr>
-      <tr><td>State</td><td><span class="mono">lead_tags</span></td><td>What is true about them right now?</td></tr>
-      <tr><td>Outcome</td><td><span class="mono">campaign_members</span></td><td>What did we do, and what happened?</td></tr>
-    </table>
+<section id="ask"><div class="wrap">
+  <h2>Ask it the questions nobody can currently answer</h2>
+  <p>Your agent has the whole database. These are real questions, and the answers exist because
+     every row remembers where it came from.</p>
+  <div class="qa">
+    <div class="card">
+      <div class="q">Where did this list actually come from?</div>
+      <div class="a"><span><b>1,240 leads</b>, pulled from Apollo on 12 Aug 2026. Filters were
+        headcount 50-500, US only, titles matching "head of support". 318 came from a second pull
+        on 28 Aug with the headcount floor dropped to 20.</span></div>
     </div>
-    <p class="note">Because judgment is versioned and stored with its full result, you can re-run last quarter's qualifier and reproduce exactly why a lead was included. Because provenance is separate from judgment, you can change your targeting rules without losing the record of where anyone came from.</p>
-  </div>
-</section>
-
-<section id="where">
-  <div class="wrap">
-    <h2>Where it sits in your stack</h2>
-    <div class="diagram">
-<pre>  Data vendors                <b>MarketBase</b>                 Execution
-  ────────────                ──────────                 ─────────
-  Apollo        ─┐                                   ┌─  Smartlead
-  ZoomInfo      ─┤    ┌───────────────────────┐      ├─  Outreach
-  Clay          ─┼──▶ │  provenance           │ ────▶├─  Lemlist
-  LinkedIn      ─┤    │  judgment (versioned) │      ├─  HubSpot
-  Your scraper  ─┘    │  state                │      └─  Your CRM
-                      │  outcome              │
-  CSV upload    ────▶ │                       │ ◀────  status written back
-                      └───────────────────────┘</pre>
+    <div class="card">
+      <div class="q">Have we already enriched any of these people?</div>
+      <div class="a"><span><b>612 of 900 are already enriched</b>, most recently 3 Sep. Enriching the
+        remaining 288 will cost 288 credits. The other 612 are served from cache and cost nothing.</span></div>
     </div>
-    <p style="margin-top:20px">MarketBase does not send anything. It does not own your sequencer, and it will not try to replace your CRM. It owns the record of who you targeted and why.</p>
-    <div class="grid">
-      <div class="card">
-        <h3>Never pay twice</h3>
-        <p>Every raw vendor response is cached before it is parsed, keyed on the API, endpoint, and normalized params. A job that dies on page 12 resumes from cache for pages 1 through 11.</p>
-      </div>
-      <div class="card">
-        <h3>Deal-aware suppression</h3>
-        <p>Deal state syncs from your CRM, so leads at accounts with an open opportunity are held back automatically instead of getting cold outbound from a rep who did not know.</p>
-      </div>
+    <div class="card">
+      <div class="q">Which message went to which version of this audience?</div>
+      <div class="a"><span>Audience <b>v1</b> got messages v1 and v2. Audience <b>v1.1</b>, which added
+        the Series B filter, got v3 only. The 47 leads that appear in both got v2 and v3, and 12 of
+        them replied after v3.</span></div>
+    </div>
+    <div class="card">
+      <div class="q">What changed when I tightened the ICP last week?</div>
+      <div class="a"><span>Qualifier <b>icp_v4</b> dropped 214 leads that <b>icp_v3</b> had passed,
+        mostly on the new headcount floor. 31 of those had already been messaged. Both verdicts are
+        still stored, so you can diff or roll back.</span></div>
+    </div>
+    <div class="card">
+      <div class="q">Is any of this stale?</div>
+      <div class="a"><span><b>1,847 rows were enriched more than 90 days ago.</b> Job titles drift
+        fastest. Re-running keeps the old values, so you can measure how much actually changed
+        before trusting the next run.</span></div>
+    </div>
+    <div class="card">
+      <div class="q">Which prompt filled in this column?</div>
+      <div class="a"><span>Column <code class="inline">persona</code> was written by classifier
+        <b>persona_v2</b> on 19 Aug, using gpt-4o-mini. The prompt is stored with the run, along with
+        the full result for each row, so you can re-run it or fix it and compare.</span></div>
     </div>
   </div>
-</section>
+</div></section>
 
-<section id="start">
-  <div class="wrap">
-    <h2>Quickstart</h2>
-    <p>Requires Postgres 14 or newer. Any Postgres works: local, Neon, Supabase, RDS.</p>
-<pre><span class="c"># Clone and point at a database</span>
-git clone https://github.com/marketbase-dev/marketbase.git
-cd marketbase
-export MARKETBASE_URL=<span class="a">"postgresql://user:pass@localhost:5432/marketbase"</span>
+<section id="start"><div class="wrap">
+  <h2>Quickstart</h2>
+  <p>Any Postgres works: local, Neon, Supabase, RDS.</p>
+<pre><span class="c"># point it at a database you already have</span>
+git clone https://github.com/marketbase-dev/marketbase.git &amp;&amp; cd marketbase
+export MARKETBASE_URL="postgresql://localhost:5432/marketbase"
 
-<span class="c"># Apply the schema (additive, safe to re-run)</span>
-psql "$MARKETBASE_URL" -f schema/000_bootstrap.sql
-for f in schema/0*.sql; do psql "$MARKETBASE_URL" -f "$f"; done</pre>
-    <h3 style="margin-top:28px">Start from a CSV, not a database</h3>
-    <p>Most people start with a spreadsheet. That path is first-class: point MarketBase at a CSV and get back a deduplicated list with provenance attached and suppression already applied.</p>
-<pre>marketbase import leads.csv --source apollo --label <span class="a">"Q3 ICP pull"</span>
-marketbase qualify --qualifier icp_v1
-marketbase export --campaign q3_outbound --format csv</pre>
-    <p class="note">You do not need to know what a data warehouse is to use MarketBase. Postgres is an implementation detail.</p>
-  </div>
-</section>
+<span class="c"># apply the schema (tracked, so re-running is a no-op)</span>
+python3 tools/apply_schema.py</pre>
+  <p>Running it for several clients? Each gets its own instance and its own credential, on the same
+     schema and the same tools. Already on gtmdb? It is the same schema, so there is nothing to
+     migrate: <code class="inline">./scripts/migrate_from_gtmdb.sh</code> just registers it.</p>
+</div></section>
 
-<section id="data">
-  <div class="wrap">
-    <h2>Open datasets</h2>
-    <p>MarketBase publishes open, well-structured GTM datasets under the same schema, so they load straight into your instance.</p>
-    <p>Every dataset ships with a manifest recording where it came from, when it was collected, its license, and its known limitations. Provenance is the whole point of this project, and that applies to our own data too.</p>
-    <div class="tscroll">
-    <table>
-      <tr><th>Dataset</th><th>Description</th><th>Status</th></tr>
-      <tr><td><span class="mono">source-types</span></td><td>Canonical taxonomy of GTM lead-discovery methods</td><td>Planned</td></tr>
-      <tr><td><span class="mono">disqualifier-rules</span></td><td>Reusable exclusion rules: competitors, out of geo, vendor employees</td><td>Planned</td></tr>
-      <tr><td><span class="mono">campaign-taxonomy</span></td><td>Naming conventions and status models for outbound campaigns</td><td>Planned</td></tr>
-    </table>
-    </div>
-  </div>
-</section>
-
-<section id="plugin">
-  <div class="wrap">
-    <h2>Drive it from Claude Code</h2>
-    <p>The repository is also a Claude Code plugin, so you can run the whole pipeline conversationally.</p>
+<section id="plugin"><div class="wrap">
+  <h2>Drive it from your agent</h2>
+  <p>The repo is a Claude Code plugin, so the questions above are things you actually type.</p>
 <pre>/plugin marketplace add marketbase-dev/marketbase
 /plugin install marketbase@marketbase</pre>
-    <div class="tscroll">
-    <table>
-      <tr><th>Command</th><th>What it does</th></tr>
-      <tr><td><span class="mono">/marketbase:init</span></td><td>Provision a database and apply the schema</td></tr>
-      <tr><td><span class="mono">/marketbase:source</span></td><td>Ingest leads from a vendor or CSV, recording provenance</td></tr>
-      <tr><td><span class="mono">/marketbase:qualify</span></td><td>Run a versioned qualifier over a cohort</td></tr>
-      <tr><td><span class="mono">/marketbase:stage</span></td><td>Stage qualified leads into a campaign</td></tr>
-    </table>
-    </div>
-  </div>
-</section>
+  <p>It is a Postgres database, so anything that speaks SQL already works: Cursor, VS Code, n8n,
+     OpenClaw, a Python script, or a teammate in <code class="inline">psql</code>.</p>
+</div></section>
 
-<footer>
-  <div class="wrap">
-    <p><strong>MarketBase</strong> is source available under the <a href="https://github.com/marketbase-dev/marketbase/blob/main/LICENSE">Business Source License 1.1</a>. Free for commercial use in your own company and for your clients. Each version converts to Apache 2.0 four years after its release.</p>
-    <p><a href="https://github.com/marketbase-dev/marketbase">GitHub</a> · <a href="https://github.com/marketbase-dev/marketbase/blob/main/CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/marketbase-dev/marketbase/issues">Issues</a></p>
-  </div>
-</footer>
+<footer><div class="wrap">
+  <p><strong>MarketBase</strong> is free and source available under
+     <a href="https://github.com/marketbase-dev/marketbase/blob/main/LICENSE">BUSL 1.1</a>,
+     converting to Apache 2.0 four years after each release.</p>
+  <p><a href="https://github.com/marketbase-dev/marketbase">GitHub</a> ·
+     <a href="https://github.com/marketbase-dev/marketbase/blob/main/CONTRIBUTING.md">Contributing</a> ·
+     <a href="https://github.com/marketbase-dev/marketbase/issues">Issues</a></p>
+</div></footer>
 
 </body>
 </html>
