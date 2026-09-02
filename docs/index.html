@@ -80,6 +80,19 @@ p{margin:0 0 16px;color:var(--muted)}
 .core .mark span{color:var(--accent)}
 .core .pill{margin-top:8px;font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.06em;
   text-transform:uppercase;color:var(--accent)}
+/* no-more strip */
+.nomore{border-bottom:1px solid var(--border);background:var(--panel)}
+.nomore .wrap{padding:26px 24px}
+.nomore h4{margin:0 0 14px;font-size:11px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--accent);font-weight:700}
+.nomore ul{list-style:none;padding:0;margin:0;display:grid;gap:9px 26px;
+  grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.nomore li{display:grid;grid-template-columns:15px 1fr;gap:9px;align-items:start;
+  font-size:14.3px;color:var(--muted);line-height:1.5}
+.nomore li svg{width:13px;height:13px;margin-top:5px;fill:none;stroke:var(--bad);
+  stroke-width:2.6;stroke-linecap:round}
+.nomore b{color:var(--text);font-weight:600}
+
 /* sections */
 section{padding:56px 0;border-bottom:1px solid var(--border)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:22px}
@@ -132,8 +145,8 @@ footer a{color:var(--accent);text-decoration:none}
     <h1>For everything your<br>CRM won't hold.</h1>
     <p class="lede">Every enrichment, every list, every tag, every score and classification, every
       signal. Your CRM shouldn't hold these. Neither should your local disk or a folder in Drive.</p>
-    <p class="lede"><strong>One database you own.</strong> Your whole team works from it, and so does
-      every agent they use.</p>
+    <p class="lede">Store everything in <strong>one flexibly-opinionated database</strong>, used by all
+      your team members and agents.</p>
     <ul class="bens">
       <li><span class="bic"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span>
         <span><b>Never pay or run the same thing twice.</b> Every enrichment and scrape result is kept, keyed on the call that produced it.</span></li>
@@ -170,6 +183,18 @@ footer a{color:var(--accent);text-decoration:none}
         </div>
       </div>  </div>
 </div></div></div>
+<div class="nomore"><div class="wrap">
+  <h4>No more</h4>
+  <ul>
+    <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span><b>"Which CSV was this, and when did I pull it?"</b></span></li>
+    <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Results stranded in a <b>Clay table</b> nobody else can open</span></li>
+    <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span><b>n8n runs</b> whose output is gone by the time you need it</span></li>
+    <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Drive folders of exports with the date in the filename</span></li>
+    <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Paying again for <b>enrichment you already bought</b></span></li>
+    <li><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span><code class="inline">final_v3_USE_THIS.xlsx</code></span></li>
+  </ul>
+</div></div>
+
 <section id="isnt"><div class="wrap">
   <h2>What MarketBase is, and isn't</h2>
   <p>It is a schema and a toolkit, not a service. There is nothing to host and nothing to run.</p>
