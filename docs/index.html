@@ -121,6 +121,7 @@ footer a{color:var(--accent);text-decoration:none}
   <a class="brand" href="/">Market<span>Base</span></a>
   <a class="nav" href="#isnt">What it is</a>
   <a class="nav" href="#ask">Ask it</a>
+  <a class="nav" href="#scale">One or many</a>
   <a class="nav" href="#start">Quickstart</a>
   <a class="nav keep" href="https://github.com/marketbase-dev/marketbase">GitHub</a>
 </div></header>
@@ -179,6 +180,7 @@ footer a{color:var(--accent);text-decoration:none}
         <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>A schema you point at a database you already have <span style="opacity:.7">(any Postgres: local, Neon, Supabase, RDS)</span></span></li>
         <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>A toolkit that runs with your own API keys, billed to you</span></li>
         <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>Shared state: every agent and teammate reads and writes the same rows, so work done in one tool is context in the next</span></li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>Versioned: ICP rules, prompts and scores are kept alongside the results they produced, so you can diff two versions or roll one back</span></li>
         <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>Free, and source available under BUSL, converting to Apache 2.0</span></li>
       </ul>
     </div>
@@ -233,6 +235,43 @@ footer a{color:var(--accent);text-decoration:none}
       <div class="a"><span>Column <code class="inline">persona</code> was written by classifier
         <b>persona_v2</b> on 19 Aug, using gpt-4o-mini. The prompt is stored with the run, along with
         the full result for each row, so you can re-run it or fix it and compare.</span></div>
+    </div>
+  </div>
+</div></section>
+
+<section id="scale"><div class="wrap">
+  <h2>Use it for one company, or twenty</h2>
+  <p>MarketBase was built by people running go-to-market for a single company and by people
+     running it for a dozen clients at once. Both are first-class, and it is the same schema and
+     the same tools either way.</p>
+  <div class="two">
+    <div class="panel">
+      <h3>If you run one</h3>
+      <p style="margin:0 0 14px">Point it at a database, apply the schema, and you are done. There
+         is no instance concept to learn and nothing extra to configure. Everything on this page
+         works exactly as described.</p>
+      <p style="margin:0"><code class="inline">python3 tools/apply_schema.py</code></p>
+    </div>
+    <div class="panel">
+      <h3>If you run many</h3>
+      <p style="margin:0 0 14px">Each client gets its own named instance and its own database, with
+         credentials scoped per instance so a run can never be billed to the wrong client. One
+         secrets project holds them all without collision.</p>
+      <p style="margin:0"><code class="inline">--instance acme</code> · <code class="inline">--instance northwind</code></p>
+    </div>
+  </div>
+  <div class="two" style="margin-top:20px">
+    <div class="panel">
+      <h3>Work compounds across clients</h3>
+      <p style="margin:0">Competitor research, battle cards, classifiers, scoring rules and export
+         formats are built once and reused. A new client starts with everything you have already
+         figured out, instead of a blank Clay table.</p>
+    </div>
+    <div class="panel">
+      <h3>Data does not</h3>
+      <p style="margin:0">Instances are separate databases. One client's leads, enrichments and
+         conversations never touch another's. What travels between them is the logic you wrote,
+         never the records.</p>
     </div>
   </div>
 </div></section>
