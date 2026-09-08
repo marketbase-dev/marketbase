@@ -23,7 +23,7 @@ account's own analytics through its own connected Unipile session.
 
 Prereqs:
   • ~/.env.<Client> with GTM_DB_CONNSTRING (the client's Neon DB).
-  • ~/.env with FRESH_LINKEDIN_DATA_API_KEY (Saleleads), UNIPILE_BASE_URL,
+  • ~/.env with RAPIDAPI_KEY (Saleleads), UNIPILE_BASE_URL,
     UNIPILE_API_KEY.
   • The target person's OWN LinkedIn connected to Unipile (else no impressions).
 

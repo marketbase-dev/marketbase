@@ -50,9 +50,9 @@ PER_PAGE = 10
 
 
 def _key() -> str:
-    k = os.environ.get("FRESH_LINKEDIN_DATA_API_KEY", "")
+    k = os.environ.get("RAPIDAPI_KEY", "")
     if not k:
-        sys.exit("FRESH_LINKEDIN_DATA_API_KEY missing in env")
+        sys.exit("RAPIDAPI_KEY missing in env")
     return k
 
 

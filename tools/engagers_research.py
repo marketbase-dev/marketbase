@@ -49,7 +49,7 @@ SKILL_NAME = "engagers-research"
 
 
 def _api_key() -> str:
-    return os.environ.get("FRESH_LINKEDIN_DATA_API_KEY", "")
+    return os.environ.get("RAPIDAPI_KEY", "")
 
 
 # ── Raw-response archive (CLAUDE.md "never re-pay for scraping" rule) ──────────

@@ -99,9 +99,9 @@ def main() -> int:
     args = ap.parse_args()
 
     env = load_client_env(args.client)
-    key = os.environ.get("FRESH_LINKEDIN_DATA_API_KEY") or env.get("FRESH_LINKEDIN_DATA_API_KEY")
+    key = os.environ.get("RAPIDAPI_KEY") or env.get("RAPIDAPI_KEY")
     if not key:
-        sys.exit("FRESH_LINKEDIN_DATA_API_KEY missing (source ~/.env).")
+        sys.exit("RAPIDAPI_KEY missing (Infisical: Impact 11 Team).")
 
     conn = connect(args.client)
     sql = f"SELECT l.id, l.name, l.linkedin_url FROM leads l WHERE {args.where} ORDER BY l.name"

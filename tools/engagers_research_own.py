@@ -38,9 +38,9 @@ SKILL_NAME = "engagers-research-own"
 
 def _load_key() -> str:
     for ln in open(os.path.expanduser("~/.env")).read().splitlines():
-        if ln.startswith("FRESH_LINKEDIN_DATA_API_KEY"):
+        if ln.startswith("RAPIDAPI_KEY"):
             return ln.split("=", 1)[1].strip().strip('"').strip("'")
-    sys.exit("FRESH_LINKEDIN_DATA_API_KEY missing")
+    sys.exit("RAPIDAPI_KEY missing")
 
 
 def sl_get(path: str, params: dict, key: str) -> dict:
