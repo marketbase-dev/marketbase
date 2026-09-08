@@ -53,7 +53,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     a=ap.parse_args()
     g=le("~/.env"); cl=le(f"~/.env.{a.client}")
-    key=g["FRESH_LINKEDIN_DATA_API_KEY"]; db=cl["GTM_DB_CONNSTRING"]
+    key=g["RAPIDAPI_KEY"]; db=cl["GTM_DB_CONNSTRING"]
     import psycopg2
     con=psycopg2.connect(db); cache=psycopg2.connect(db)
 

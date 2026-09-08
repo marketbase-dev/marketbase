@@ -59,13 +59,13 @@ def _throttle(rpm: int) -> None:
 
 
 def _api_key() -> str:
-    k = os.environ.get("FRESH_LINKEDIN_DATA_API_KEY")
+    k = os.environ.get("RAPIDAPI_KEY")
     if k:
         return k
     p = Path.home() / ".env"
     if p.exists():
         for ln in p.read_text().splitlines():
-            if ln.startswith("FRESH_LINKEDIN_DATA_API_KEY"):
+            if ln.startswith("RAPIDAPI_KEY"):
                 return ln.split("=", 1)[1].strip().strip('"').strip("'")
     return ""
 
@@ -77,7 +77,7 @@ def _request(method: str, path: str, params: dict | None = None,
     {'success': False, '_error': ...} on hard failure."""
     key = _api_key()
     if not key:
-        return {"success": False, "_error": "no FRESH_LINKEDIN_DATA_API_KEY"}
+        return {"success": False, "_error": "no RAPIDAPI_KEY"}
     url = f"{BASE}{path}"
     if params:
         url += "?" + urllib.parse.urlencode(params)
