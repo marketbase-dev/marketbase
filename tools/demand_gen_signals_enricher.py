@@ -163,7 +163,7 @@ rule_changes: |
 # ── Saleleads HTTP ────────────────────────────────────────────────────────
 
 def _api_key() -> str:
-    return os.environ.get("FRESH_LINKEDIN_DATA_API_KEY", "")
+    return os.environ.get("RAPIDAPI_KEY", "")
 
 
 def saleleads_get(path: str, params: dict, retries: int = 6,
