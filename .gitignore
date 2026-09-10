@@ -30,3 +30,6 @@ data/local/
 
 # Private denylist for scripts/presubmit.sh (never commit)
 .sanitize-denylist
+
+# Claude Code session worktrees — one isolated checkout per session
+**/.claude/worktrees/
