@@ -3,9 +3,18 @@
 #
 # Two layers:
 #   1. Generic secret + PII patterns (safe to publish, lives in this repo)
-#   2. A private denylist of client/person names, read from .sanitize-denylist
-#      which is gitignored ON PURPOSE. Putting real client names in a public
-#      repo would leak the very thing the list exists to catch.
+#   2. A private denylist of client/person names. It is NEVER a file in this
+#      repo: putting real client names in a public repo would leak the very
+#      thing the list exists to catch.
+#
+#      SOURCE OF TRUTH: Infisical, secret SANITIZE_DENYLIST in the shared
+#      "Impact 11 Team" project. One copy, so it cannot drift between a laptop,
+#      a second laptop, and CI, and so a new machine inherits it by logging in
+#      rather than by someone remembering to hand over a file.
+#
+#      Resolution order: $SANITIZE_DENYLIST (CI passes it in) ->
+#      $SANITIZE_DENYLIST_FILE -> a local .sanitize-denylist if one still
+#      exists (legacy, still gitignored) -> Infisical.
 #
 # WORKTREES: because the denylist is gitignored, `git worktree add` does NOT
 # copy it, so a worktree had no Layer 2 at all and every commit made from one
@@ -89,9 +98,9 @@ if [ -n "${SANITIZE_DENYLIST:-}" ] && [ ! -f "$DENY" ]; then
   echo "denylist: hit details will be WITHHELD from this log (REDACT_HITS=$REDACT_HITS)"
 fi
 
+# Legacy local file, if this machine still has one. Not required any more.
 # In a linked worktree, .git is a file and --git-common-dir points at the main
-# checkout's .git; its parent is the main working tree, where the gitignored
-# denylist actually lives.
+# checkout's .git; its parent is the main working tree.
 if [ ! -f "$DENY" ]; then
   COMMON=$(git rev-parse --git-common-dir 2>/dev/null)
   case "$COMMON" in
@@ -102,6 +111,21 @@ if [ ! -f "$DENY" ]; then
     DENY="$MAIN/$DENY"
     echo "denylist: using $DENY (worktree)"
   fi
+fi
+
+# Last resort and the intended path: pull it from Infisical. Uses whatever
+# login this machine already has, so there is nothing extra to distribute.
+if [ ! -f "$DENY" ] && command -v infisical >/dev/null 2>&1; then
+  _dl=$(infisical secrets get SANITIZE_DENYLIST \
+          --projectId "${INFISICAL_TEAM_PROJECT_ID:-5669d398-39d6-41d9-80d0-8c325ac819b7}" \
+          --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null)
+  if [ -n "$_dl" ]; then
+    DENY=$(mktemp)
+    printf '%s\n' "$_dl" > "$DENY"
+    trap 'rm -f "$DENY"' EXIT
+    echo "denylist: loaded from Infisical ($(grep -cvE '^\s*(#|$)' "$DENY") terms)"
+  fi
+  unset _dl
 fi
 
 if [ -f "$DENY" ]; then
@@ -133,11 +157,13 @@ else
     echo "      still checks it). Generic patterns ran normally."
     echo
   else
-    echo "BLOCKED: no .sanitize-denylist found (searched this tree, the main"
-    echo "         checkout, and \$SANITIZE_DENYLIST). Layer 2 did NOT run, so"
-    echo "         client and person names were NOT checked."
-    echo "         Locally: cp .sanitize-denylist.example .sanitize-denylist"
-    echo "         In CI:   set the SANITIZE_DENYLIST repository secret."
+    echo "BLOCKED: could not load the denylist from any source. Layer 2 did"
+    echo "         NOT run, so client and person names were NOT checked."
+    echo "         Tried: \$SANITIZE_DENYLIST, \$SANITIZE_DENYLIST_FILE, a local"
+    echo "         .sanitize-denylist, and Infisical."
+    echo "         Locally: run 'infisical login' (secret SANITIZE_DENYLIST in"
+    echo "         the Impact 11 Team project)."
+    echo "         In CI:   check the Infisical machine-identity auth step."
     echo "         Override with: git commit --no-verify"
     echo
     FAIL=1
