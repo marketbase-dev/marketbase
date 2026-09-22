@@ -44,9 +44,20 @@ else
 fi
 [ -z "$FILES" ] && { echo "nothing to scan"; exit 0; }
 
+# Files exempt from the GENERIC patterns. presubmit.sh is here because it
+# contains those patterns literally and would match every one of them.
+#
+# It is NOT exempt from the denylist. The terms live in Infisical, never in this
+# file, so scanning it for them is safe -- and necessary: a client name once sat
+# in a comment HERE, in the only file the scan could not see, for exactly as
+# long as the blanket exemption existed.
+EXCLUDE_L1='^(LICENSE|LICENSE-APACHE-2\.0|scripts/presubmit\.sh|\.gitignore)$'
+EXCLUDE_L2='^(LICENSE|LICENSE-APACHE-2\.0|\.gitignore)$'
+EXCLUDE="$EXCLUDE_L1"
+
 scan() { # pattern, label
   local hits
-  hits=$(printf '%s\n' $FILES | grep -vE '^(LICENSE|LICENSE-APACHE-2\.0|scripts/presubmit\.sh|\.gitignore)$' \
+  hits=$(printf '%s\n' $FILES | grep -vE "$EXCLUDE" \
     | xargs -I{} grep -HInEi "$1" {} 2>/dev/null \
     | grep -vEi 'user:pass@|USER:PASSWORD@|<[a-z-]+>:<[a-z-]+>@|youruser:|:password@|example\.com|placeholder|\$\{|<your-|postgres:postgres@localhost|@localhost:5432|@127\.0\.0\.1')
   if [ -n "$hits" ]; then
@@ -54,8 +65,8 @@ scan() { # pattern, label
       # A denylist hit would otherwise print BOTH the term and the whole
       # matching source line — publishing, into a world-readable CI log, the
       # exact string the denylist exists to keep out of this repo. GitHub masks
-      # secret values, but this grep is case-insensitive, so "<client>" in
-      # a file would not match the masked literal "<Client>". Do not rely
+      # secret values, but this grep is case-insensitive, so a lower-case
+      # spelling in a file never matches the masked literal. Do not rely
       # on the mask: print locations only, and let the developer reproduce it
       # locally where the full detail is safe.
       echo "BLOCKED: ${3:-$2}"
@@ -135,12 +146,16 @@ if [ ! -f "$DENY" ] && command -v infisical >/dev/null 2>&1; then
 fi
 
 if [ -f "$DENY" ]; then
+  # Layer 2 also reads this file — see EXCLUDE_L2.
+  EXCLUDE="$EXCLUDE_L2"
   while IFS= read -r term; do
     [ -z "$term" ] && continue
     case "$term" in \#*) continue ;; esac
     # Letter-only boundaries. Catches Name_TAM_v1 and name_queued, because
     # underscores and digits are not letters, but never matches a name that
-    # happens to be a substring of a real word (tatio inside annotations).
+    # happens to be a substring of an ordinary word. (The example that used to
+    # be written here was itself a real denylisted name -- which is how a
+    # client name came to sit in this file. Keep examples synthetic.)
     esc=$(printf '%s' "$term" | sed 's/[][\.*^$/]/\\&/g')
     DENY_N=$((${DENY_N:-0} + 1))
     # Third argument is the REDACTED label — an index, never the term itself.
