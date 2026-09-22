@@ -35,7 +35,22 @@ scan() { # pattern, label
     | xargs -I{} grep -HInEi "$1" {} 2>/dev/null \
     | grep -vEi 'user:pass@|USER:PASSWORD@|<[a-z-]+>:<[a-z-]+>@|youruser:|:password@|example\.com|placeholder|\$\{|<your-|postgres:postgres@localhost|@localhost:5432|@127\.0\.0\.1')
   if [ -n "$hits" ]; then
-    echo "BLOCKED: $2"; echo "$hits" | head -12 | sed 's/^/    /'; echo
+    if [ "${REDACT_HITS:-}" = "1" ]; then
+      # A denylist hit would otherwise print BOTH the term and the whole
+      # matching source line — publishing, into a world-readable CI log, the
+      # exact string the denylist exists to keep out of this repo. GitHub masks
+      # secret values, but this grep is case-insensitive, so "<client>" in
+      # a file would not match the masked literal "<Client>". Do not rely
+      # on the mask: print locations only, and let the developer reproduce it
+      # locally where the full detail is safe.
+      echo "BLOCKED: ${3:-$2}"
+      echo "$hits" | head -12 | sed -E 's/^([^:]+:[0-9]+):.*/    \1/' | sort -u
+      echo "    (term and matching text withheld: this log may be public."
+      echo "     Reproduce locally with ./scripts/presubmit.sh for full detail.)"
+      echo
+    else
+      echo "BLOCKED: $2"; echo "$hits" | head -12 | sed 's/^/    /'; echo
+    fi
     FAIL=1
   fi
 }
@@ -67,7 +82,11 @@ if [ -n "${SANITIZE_DENYLIST:-}" ] && [ ! -f "$DENY" ]; then
   DENY=$(mktemp)
   printf '%s\n' "$SANITIZE_DENYLIST" > "$DENY"
   trap 'rm -f "$DENY"' EXIT
+  # The list arriving by environment means CI, whose logs are public for a
+  # public repo. Withhold hit details there by default.
+  REDACT_HITS="${REDACT_HITS:-1}"
   echo "denylist: loaded from \$SANITIZE_DENYLIST ($(grep -cvE '^\s*(#|$)' "$DENY") terms)"
+  echo "denylist: hit details will be WITHHELD from this log (REDACT_HITS=$REDACT_HITS)"
 fi
 
 # In a linked worktree, .git is a file and --git-common-dir points at the main
@@ -93,7 +112,10 @@ if [ -f "$DENY" ]; then
     # underscores and digits are not letters, but never matches a name that
     # happens to be a substring of a real word (tatio inside annotations).
     esc=$(printf '%s' "$term" | sed 's/[][\.*^$/]/\\&/g')
-    scan "(^|[^A-Za-z])${esc}([^A-Za-z]|$)" "denylisted term: $term"
+    DENY_N=$((${DENY_N:-0} + 1))
+    # Third argument is the REDACTED label — an index, never the term itself.
+    scan "(^|[^A-Za-z])${esc}([^A-Za-z]|$)" "denylisted term: $term" \
+         "denylisted term #${DENY_N} (name withheld)"
   done < "$DENY"
 else
   # Not a NOTE. This repo is PUBLIC and Layer 2 is the only thing standing
