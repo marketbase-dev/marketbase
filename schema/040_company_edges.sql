@@ -2,7 +2,7 @@
 -- Company <-> company relationships as a first-class relation.
 --
 -- 007_company_relationships can only name ONE party: the counterparty is always
--- implicitly the client, so it cannot express "acme is a customer of Vendor-A".
+-- implicitly the client, so it cannot express "acme is a customer of vendor-a".
 -- 038's company_vendor_customers was a vendor-specific workaround for exactly
 -- that gap. This generalises both: any company, any counterparty, any type --
 -- our customers, our partners' customers, a competitor's customers.
@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS company_edges (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 
     -- Direction convention: the row reads "<from> <relationship> <to>".
-    -- "acme is a customer of Vendor-A"  -> from=acme, to=vendor-a,  relationship='customer'
-    -- "Vendor-A is a competitor of us"  -> from=vendor-a, to=<self>, relationship='competitor'
+    -- "acme buys from vendor-a"     -> from=acme, to=vendor-a, relationship='customer'
+    -- "vendor-a competes with us"   -> from=vendor-a, to=<self>, relationship='competitor'
     from_company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     to_company_id   uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
 

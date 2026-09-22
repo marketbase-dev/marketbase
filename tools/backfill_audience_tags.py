@@ -13,7 +13,7 @@ Writes per lead:
 Idempotent: recomputes from scratch each run, removing tags that no longer
 apply, so it can't drift from the rules.
 
-  python3 backfill_audience_tags.py --client "Acme Corp" [--dry-run]
+  python3 backfill_audience_tags.py --client "<Client>" [--dry-run]
 """
 from __future__ import annotations
 import argparse, os, sys
