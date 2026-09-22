@@ -20,9 +20,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The denylist lives in Infisical (secret SANITIZE_DENYLIST, "Impact 11
-      # Team"), the same copy developers' machines read, so there is one source
-      # of truth rather than one per place-that-checks.
+      # The denylist lives in Infisical (secret SANITIZE_DENYLIST, project
+      # "Repo Sanitization"), the same copy developers' machines read, so there
+      # is one source of truth rather than one per place-that-checks.
+      #
+      # That project holds NOTHING ELSE. Infisical grants access per project,
+      # so an identity scoped to a shared project could read every secret in
+      # it; this one can read the denylist and nothing more.
       #
       # Auth is OIDC: GitHub mints a short-lived token, Infisical trusts this
       # repository, and nothing secret is stored here. INFISICAL_IDENTITY_ID is

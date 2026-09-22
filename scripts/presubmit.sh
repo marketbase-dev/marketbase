@@ -7,10 +7,16 @@
 #      repo: putting real client names in a public repo would leak the very
 #      thing the list exists to catch.
 #
-#      SOURCE OF TRUTH: Infisical, secret SANITIZE_DENYLIST in the shared
-#      "Impact 11 Team" project. One copy, so it cannot drift between a laptop,
-#      a second laptop, and CI, and so a new machine inherits it by logging in
-#      rather than by someone remembering to hand over a file.
+#      SOURCE OF TRUTH: Infisical, secret SANITIZE_DENYLIST in the dedicated
+#      "Repo Sanitization" project. One copy, so it cannot drift between a
+#      laptop, a second laptop, and CI, and so a new machine inherits it by
+#      logging in rather than by someone remembering to hand over a file.
+#
+#      ITS OWN PROJECT ON PURPOSE. Infisical grants access per PROJECT (roles
+#      attach there, narrowable by environment and path, not to one secret), so
+#      an identity that could read this list inside a shared project could read
+#      every other secret in it too. A CI runner on a PUBLIC repo must not hold
+#      a key that also opens vendor API keys and database URLs.
 #
 #      Resolution order: $SANITIZE_DENYLIST (CI passes it in) ->
 #      $SANITIZE_DENYLIST_FILE -> a local .sanitize-denylist if one still
@@ -117,7 +123,7 @@ fi
 # login this machine already has, so there is nothing extra to distribute.
 if [ ! -f "$DENY" ] && command -v infisical >/dev/null 2>&1; then
   _dl=$(infisical secrets get SANITIZE_DENYLIST \
-          --projectId "${INFISICAL_TEAM_PROJECT_ID:-5669d398-39d6-41d9-80d0-8c325ac819b7}" \
+          --projectId "${SANITIZE_PROJECT_ID:-${INFISICAL_TEAM_PROJECT_ID:-d2dbbd59-447f-4fc2-98d2-6ab0acded9fe}}" \
           --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null)
   if [ -n "$_dl" ]; then
     DENY=$(mktemp)
@@ -162,7 +168,7 @@ else
     echo "         Tried: \$SANITIZE_DENYLIST, \$SANITIZE_DENYLIST_FILE, a local"
     echo "         .sanitize-denylist, and Infisical."
     echo "         Locally: run 'infisical login' (secret SANITIZE_DENYLIST in"
-    echo "         the Impact 11 Team project)."
+    echo "         the 'Repo Sanitization' project)."
     echo "         In CI:   check the Infisical machine-identity auth step."
     echo "         Override with: git commit --no-verify"
     echo
