@@ -14,7 +14,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generic secret and PII patterns
+      - name: Secret and PII patterns, including the private denylist
+        # SANITIZE_DENYLIST carries the client/person names that must never
+        # reach this public repo. It is a secret because the list itself is the
+        # sensitive part. Fork PRs do not receive secrets, so Layer 2 is
+        # explicitly optional there and the push-to-main run is the real gate.
+        env:
+          SANITIZE_DENYLIST: ${{ secrets.SANITIZE_DENYLIST }}
+          SANITIZE_DENYLIST_OPTIONAL: ${{ github.event.pull_request.head.repo.full_name != github.repository && '1' || '' }}
         run: ./scripts/presubmit.sh
 
       # The gitleaks ACTION requires a paid license for organizations.

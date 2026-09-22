@@ -54,6 +54,22 @@ scan '[A-Za-z0-9._%+-]+@(?!example\.(com|org)|user\.noreply)[A-Za-z0-9.-]+\.[A-Z
 
 # --- Layer 2: private denylist ---
 DENY=.sanitize-denylist
+
+# CI has no working copy of the gitignored denylist, so it accepts the list
+# through the environment instead — $SANITIZE_DENYLIST holds the content, from
+# a repository secret. Without this, CI silently ran Layer 1 only for weeks:
+# the scan passed every push while checking none of the client names.
+if [ -z "${SANITIZE_DENYLIST:-}" ] && [ -n "${SANITIZE_DENYLIST_FILE:-}" ] \
+   && [ -f "${SANITIZE_DENYLIST_FILE}" ]; then
+  SANITIZE_DENYLIST=$(cat "${SANITIZE_DENYLIST_FILE}")
+fi
+if [ -n "${SANITIZE_DENYLIST:-}" ] && [ ! -f "$DENY" ]; then
+  DENY=$(mktemp)
+  printf '%s\n' "$SANITIZE_DENYLIST" > "$DENY"
+  trap 'rm -f "$DENY"' EXIT
+  echo "denylist: loaded from \$SANITIZE_DENYLIST ($(grep -cvE '^\s*(#|$)' "$DENY") terms)"
+fi
+
 # In a linked worktree, .git is a file and --git-common-dir points at the main
 # checkout's .git; its parent is the main working tree, where the gitignored
 # denylist actually lives.
@@ -83,13 +99,27 @@ else
   # Not a NOTE. This repo is PUBLIC and Layer 2 is the only thing standing
   # between a client name and a permanent public git history, so "I could not
   # load it" must never read the same as "I checked and it was clean".
-  echo "BLOCKED: no .sanitize-denylist found (searched this tree and the main"
-  echo "         checkout). Layer 2 did NOT run, so client and person names"
-  echo "         were NOT checked."
-  echo "         cp .sanitize-denylist.example .sanitize-denylist and add your"
-  echo "         real terms, or override with: git commit --no-verify"
-  echo
-  FAIL=1
+  #
+  # The one sanctioned exception is a pull request from a FORK: GitHub does not
+  # expose secrets to those runs, so Layer 2 genuinely cannot run and blocking
+  # would only punish outside contributors — who do not know our client names
+  # anyway. The push-to-main run, which does get the secret, is the gate that
+  # matters. Set SANITIZE_DENYLIST_OPTIONAL=1 for exactly that case.
+  if [ "${SANITIZE_DENYLIST_OPTIONAL:-}" = "1" ]; then
+    echo "NOTE: no denylist available and SANITIZE_DENYLIST_OPTIONAL=1 —"
+    echo "      Layer 2 SKIPPED (expected on a fork PR; the push-to-main run"
+    echo "      still checks it). Generic patterns ran normally."
+    echo
+  else
+    echo "BLOCKED: no .sanitize-denylist found (searched this tree, the main"
+    echo "         checkout, and \$SANITIZE_DENYLIST). Layer 2 did NOT run, so"
+    echo "         client and person names were NOT checked."
+    echo "         Locally: cp .sanitize-denylist.example .sanitize-denylist"
+    echo "         In CI:   set the SANITIZE_DENYLIST repository secret."
+    echo "         Override with: git commit --no-verify"
+    echo
+    FAIL=1
+  fi
 fi
 
 if [ "$FAIL" -ne 0 ]; then
