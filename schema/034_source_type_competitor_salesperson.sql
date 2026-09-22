@@ -12,6 +12,6 @@ INSERT INTO source_types (name, description, purpose, raw_data_shape, examples, 
    'Sales / pre-sales / sales-leadership person at a flagged competitor, discovered via Blitz (or Apollo) people search.',
    'Use for reps found by marketbase-build-competitor-rep-list against a competitor company. We monitor these because a competitor rep''s LinkedIn connections reveal buyers actively evaluating the market. raw_data carries the flattened Blitz/Apollo person record plus the qualification verdict (tags, territory tier, keep/cut/deprioritize).',
    'flattened person: name, title, linkedin_url, country/city/state, organization_name + linkedin_url; plus tags (from competitor_targeting.tag_person), tier_one (bool), verdict.',
-   'marketbase-build-competitor-rep-list for Acme Corp (2026-07).',
+   'marketbase-build-competitor-rep-list for a client (2026-07).',
    'migration-034')
 ON CONFLICT (name) DO NOTHING;

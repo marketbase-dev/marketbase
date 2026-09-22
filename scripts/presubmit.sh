@@ -7,6 +7,14 @@
 #      which is gitignored ON PURPOSE. Putting real client names in a public
 #      repo would leak the very thing the list exists to catch.
 #
+# WORKTREES: because the denylist is gitignored, `git worktree add` does NOT
+# copy it, so a worktree had no Layer 2 at all and every commit made from one
+# ran generic-patterns-only — silently, since a missing list was a NOTE and a
+# pass. Sessions here work in worktrees by default, so that was the normal
+# path, not the edge case. The list is now resolved from the main checkout via
+# --git-common-dir, and a Layer 2 that cannot be loaded FAILS the scan instead
+# of shrugging.
+#
 # Usage:  ./scripts/presubmit.sh [--staged]
 # Install as a git hook:  ln -sf ../../scripts/presubmit.sh .git/hooks/pre-commit
 
@@ -46,6 +54,21 @@ scan '[A-Za-z0-9._%+-]+@(?!example\.(com|org)|user\.noreply)[A-Za-z0-9.-]+\.[A-Z
 
 # --- Layer 2: private denylist ---
 DENY=.sanitize-denylist
+# In a linked worktree, .git is a file and --git-common-dir points at the main
+# checkout's .git; its parent is the main working tree, where the gitignored
+# denylist actually lives.
+if [ ! -f "$DENY" ]; then
+  COMMON=$(git rev-parse --git-common-dir 2>/dev/null)
+  case "$COMMON" in
+    /*) MAIN=$(dirname "$COMMON") ;;
+    *)  MAIN=$(cd "$(dirname "$COMMON")" 2>/dev/null && pwd) ;;
+  esac
+  if [ -n "${MAIN:-}" ] && [ -f "$MAIN/$DENY" ]; then
+    DENY="$MAIN/$DENY"
+    echo "denylist: using $DENY (worktree)"
+  fi
+fi
+
 if [ -f "$DENY" ]; then
   while IFS= read -r term; do
     [ -z "$term" ] && continue
@@ -57,9 +80,16 @@ if [ -f "$DENY" ]; then
     scan "(^|[^A-Za-z])${esc}([^A-Za-z]|$)" "denylisted term: $term"
   done < "$DENY"
 else
-  echo "NOTE: no $DENY found. Generic patterns only."
-  echo "      cp .sanitize-denylist.example $DENY and add your real terms."
+  # Not a NOTE. This repo is PUBLIC and Layer 2 is the only thing standing
+  # between a client name and a permanent public git history, so "I could not
+  # load it" must never read the same as "I checked and it was clean".
+  echo "BLOCKED: no .sanitize-denylist found (searched this tree and the main"
+  echo "         checkout). Layer 2 did NOT run, so client and person names"
+  echo "         were NOT checked."
+  echo "         cp .sanitize-denylist.example .sanitize-denylist and add your"
+  echo "         real terms, or override with: git commit --no-verify"
   echo
+  FAIL=1
 fi
 
 if [ "$FAIL" -ne 0 ]; then

@@ -55,7 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_cvc_method   ON company_vendor_customers(detectio
 CREATE TABLE IF NOT EXISTS vendor_tenant_probes (
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     vendor_company_id   uuid REFERENCES companies(id) ON DELETE SET NULL,
-    vendor_label        text NOT NULL,          -- 'vendor-a', 'automox', …
+    vendor_label        text NOT NULL,          -- 'vendor-a', 'vendor-b', …
     method              text NOT NULL,          -- 'tenant_dns' | 'sso_probe'
 
     target_domain       text NOT NULL,          -- the key we actually trust
