@@ -9,10 +9,49 @@ jobs:
   scan:
     name: Secret and PII scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lets this job mint a short-lived OIDC token to authenticate to
+      # Infisical. That is what removes the need to store any long-lived
+      # credential in GitHub at all.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # The denylist lives in Infisical (secret SANITIZE_DENYLIST, "Impact 11
+      # Team"), the same copy developers' machines read, so there is one source
+      # of truth rather than one per place-that-checks.
+      #
+      # Auth is OIDC: GitHub mints a short-lived token, Infisical trusts this
+      # repository, and nothing secret is stored here. INFISICAL_IDENTITY_ID is
+      # an identifier, not a credential — a var, not a secret.
+      #
+      # Until that machine identity exists, this step is a no-op and the run
+      # falls back to the SANITIZE_DENYLIST repository secret below. The scan
+      # itself still fails closed if BOTH are absent, so an unconfigured CI can
+      # never silently skip Layer 2.
+      - name: Fetch denylist from Infisical (OIDC)
+        id: infisical
+        if: vars.INFISICAL_IDENTITY_ID != ''
+        env:
+          IDENTITY_ID: ${{ vars.INFISICAL_IDENTITY_ID }}
+          PROJECT_ID: ${{ vars.INFISICAL_TEAM_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          curl -fsSL https://artifacts-cli.infisical.com/install.sh | sh -s -- -b /usr/local/bin
+          JWT=$(curl -fsSL \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=infisical" | jq -r '.value')
+          TOKEN=$(infisical login --method=oidc-auth --jwt="$JWT" \
+                    --machine-identity-id="$IDENTITY_ID" --plain --silent)
+          # Written to a file, never to an output or the log: an output would
+          # be a second place the names could surface.
+          INFISICAL_TOKEN="$TOKEN" infisical secrets get SANITIZE_DENYLIST \
+            --projectId "$PROJECT_ID" --env dev --plain > "$RUNNER_TEMP/denylist"
+          echo "file=$RUNNER_TEMP/denylist" >> "$GITHUB_OUTPUT"
+          echo "Loaded $(grep -cvE '^\s*(#|$)' "$RUNNER_TEMP/denylist") terms from Infisical"
 
       - name: Secret and PII patterns, including the private denylist
         # SANITIZE_DENYLIST carries the client/person names that must never
@@ -20,6 +59,9 @@ jobs:
         # sensitive part. Fork PRs do not receive secrets, so Layer 2 is
         # explicitly optional there and the push-to-main run is the real gate.
         env:
+          # Infisical first (one source of truth); the repository secret is the
+          # fallback while the machine identity is being set up.
+          SANITIZE_DENYLIST_FILE: ${{ steps.infisical.outputs.file }}
           SANITIZE_DENYLIST: ${{ secrets.SANITIZE_DENYLIST }}
           SANITIZE_DENYLIST_OPTIONAL: ${{ github.event.pull_request.head.repo.full_name != github.repository && '1' || '' }}
         run: ./scripts/presubmit.sh
