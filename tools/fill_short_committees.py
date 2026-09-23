@@ -237,23 +237,28 @@ def main() -> int:
                 print(f"  [{i}/{len(short)}] {str(seed_company)[:30]:30} company id unresolved")
                 continue
             cur.execute("SELECT lower(linkedin_url) FROM leads WHERE linkedin_url IS NOT NULL")
-            known = {r[0] for r in cur.fetchall()}
+            known = {r[0] for r in cur.fetchall()}  # compared case-insensitively
 
             seen, keepers = set(), []
             for kw in keywords:
                 rows, _ = search_employees(cid, kw, conn, rkey)
                 for p in rows:
-                    u = (p.get("linkedin_url") or "").lower().rstrip("/")
-                    if not u or u in seen:
+                    # NEVER lowercase this URL. /search-employees returns the
+                    # profile as a member URN (/in/ACwAA...), and LinkedIn URNs
+                    # are CASE-SENSITIVE: the lowercased form 404s on every
+                    # provider, which silently makes the member unverifiable and
+                    # unresolvable. Compare case-insensitively, store verbatim.
+                    u = (p.get("linkedin_url") or "").rstrip("/")
+                    if not u or u.lower() in seen:
                         continue
-                    seen.add(u)
+                    seen.add(u.lower())
                     ti = p.get("job_title") or ""
                     rank = x.rank_of(ti)
                     if not rank or LADDER.index(rank) > max_i:
                         continue
                     if not x.function_ok(ti, keep, rank):
                         continue
-                    if u in known:
+                    if u.lower() in known:
                         continue
                     keepers.append({"url": u, "name": p.get("full_name"), "title": ti,
                                     "rank": rank, "location": p.get("location"),
