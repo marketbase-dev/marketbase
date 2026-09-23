@@ -70,8 +70,17 @@ def main() -> int:
     ap.add_argument("--active-tag", default="expansion:buying_committee")
     ap.add_argument("--qualified-tag", default="expansion:qualified")
     ap.add_argument("--backup-tag", default="expansion:backup")
+    # Tiering RECOMPUTES from scratch, so anything a human deliberately took out
+    # of circulation is silently promoted again on the next run. A hold has to
+    # be a fact about the lead that tiering reads, not a one-off sweep.
+    ap.add_argument("--hold-tags", default="expansion:stale,expansion:filtered_out",
+                    help="comma-separated tags that exclude a member from tiering; "
+                         "these are deliberate holds (out of date window, geo "
+                         "screened out, partner-type firm) and must survive a re-run")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
+
+    hold_tags = [t.strip() for t in (args.hold_tags or "").split(",") if t.strip()]
 
     with connect(args.client) as conn:
         with conn.cursor() as cur:
@@ -84,8 +93,10 @@ def main() -> int:
                 JOIN leads l ON l.id = s.lead_id
                 JOIN lead_tags t ON t.lead_id = l.id AND t.tag = %s
                 WHERE s.source_type = %s
+                  AND NOT EXISTS (SELECT 1 FROM lead_tags h
+                                  WHERE h.lead_id = l.id AND h.tag = ANY(%s))
                 ORDER BY l.id, s.raw_data->>'company_linkedin_url'
-            """, (args.active_tag, args.source_type))
+            """, (args.active_tag, args.source_type, hold_tags))
             rows = cur.fetchall()
 
             by_company: dict[str, list] = defaultdict(list)
@@ -122,8 +133,11 @@ def main() -> int:
 
             if not args.dry_run:
                 # Recompute from scratch so re-runs with a different --cap are clean.
-                cur.execute("DELETE FROM lead_tags WHERE tag IN (%s, %s)",
-                            (args.qualified_tag, args.backup_tag))
+                cur.execute("""DELETE FROM lead_tags WHERE tag IN (%s, %s)
+                               AND NOT EXISTS (SELECT 1 FROM lead_tags h
+                                               WHERE h.lead_id = lead_tags.lead_id
+                                                 AND h.tag = ANY(%s))""",
+                            (args.qualified_tag, args.backup_tag, hold_tags))
                 cur.executemany("""INSERT INTO lead_tags (lead_id, tag, notes, tagged_by)
                                    VALUES (%s,%s,%s,'tier_expansion_candidates')
                                    ON CONFLICT (lead_id, tag) DO NOTHING""",
