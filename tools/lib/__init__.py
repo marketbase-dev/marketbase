@@ -148,9 +148,15 @@ def _actor() -> str:
     a tool that deletes tags does not have to remember to identify itself, and
     the one that forgets is exactly the one whose history you will want later.
     """
+    import getpass
     import sys as _sys
-    name = Path(_sys.argv[0]).name if _sys.argv and _sys.argv[0] else ""
-    return (name or "python").removesuffix(".py")[:60]
+    raw = Path(_sys.argv[0]).name if _sys.argv and _sys.argv[0] else ""
+    actor = (raw or "").removesuffix(".py")
+    if actor in ("", "-", "python", "python3", "-c"):
+        # stdin, heredoc or REPL: the ad-hoc case this audit exists for, so say
+        # so plainly rather than recording a meaningless "-"
+        actor = f"adhoc:{getpass.getuser()}"
+    return actor[:60]
 
 
 def connect(client: str):
