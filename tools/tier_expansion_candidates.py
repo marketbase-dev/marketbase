@@ -65,7 +65,13 @@ def sort_key(row) -> tuple:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--client", required=True)
-    ap.add_argument("--cap", type=int, default=5)
+    # The hand-over cap belongs to the CLIENT, not to whoever types the command:
+    # it is the number of people they agreed to receive per company. Read it from
+    # the targeting profile so a re-tier cannot quietly change the deal, and keep
+    # the flag as an explicit override for what-if runs.
+    ap.add_argument("--cap", type=int, default=None,
+                    help="per-company hand-over cap; defaults to the client's "
+                         "targeting_profile buying_committee.handover_cap, else 5")
     ap.add_argument("--source-type", default="buying_committee_expansion")
     ap.add_argument("--active-tag", default="expansion:buying_committee")
     ap.add_argument("--qualified-tag", default="expansion:qualified")
@@ -81,6 +87,23 @@ def main() -> int:
     args = ap.parse_args()
 
     hold_tags = [t.strip() for t in (args.hold_tags or "").split(",") if t.strip()]
+
+    if args.cap is None:
+        args.cap = 5
+        try:
+            import yaml
+            with connect(args.client) as _c, _c.cursor() as _cu:
+                _cu.execute("SELECT yaml_spec FROM processors "
+                            "WHERE processor_type='targeting_profile' "
+                            "AND superseded_by IS NULL ORDER BY created_at DESC LIMIT 1")
+                _r = _cu.fetchone()
+            if _r:
+                _cap = (yaml.safe_load(_r[0]) or {}).get("buying_committee", {}).get("handover_cap")
+                if _cap:
+                    args.cap = int(_cap)
+                    print(f"hand-over cap {args.cap} from the {args.client} targeting profile")
+        except Exception as _e:
+            print(f"could not read handover_cap from the profile ({_e}); using {args.cap}")
 
     with connect(args.client) as conn:
         with conn.cursor() as cur:
