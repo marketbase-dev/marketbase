@@ -141,10 +141,29 @@ def database_url(client: str) -> str:
     )
 
 
+def _actor() -> str:
+    """Who is about to touch this database, for the audit trail.
+
+    Derived from the entry-point script so attribution costs callers nothing:
+    a tool that deletes tags does not have to remember to identify itself, and
+    the one that forgets is exactly the one whose history you will want later.
+    """
+    import sys as _sys
+    name = Path(_sys.argv[0]).name if _sys.argv and _sys.argv[0] else ""
+    return (name or "python").removesuffix(".py")[:60]
+
+
 def connect(client: str):
     """Return a psycopg connection to the client's DB."""
     import psycopg
-    return psycopg.connect(database_url(client), autocommit=False)
+    conn = psycopg.connect(database_url(client), autocommit=False)
+    # Stamps every audit row written by triggers on this connection (see
+    # schema/050_lead_tag_removal_audit.sql). SET LOCAL would die with the
+    # first transaction, so this is session scope.
+    with conn.cursor() as cur:
+        cur.execute("SELECT set_config('marketbase.actor', %s, false)", (_actor(),))
+    conn.commit()
+    return conn
 
 
 # Schema migrations — applied in order on init.
