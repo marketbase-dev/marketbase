@@ -36,6 +36,61 @@ When in doubt, ask: "Would a brand-new client onboarded tomorrow need this
 change applied?" If yes, it's a migration. If no, it's a one-shot or an
 application-layer concern.
 
+## Lead identity: store the canonical profile, never a pointer
+
+`leads` is keyed on `linkedin_url`, so **whatever you store as that URL decides
+whether a person is one row or two.** Every ingest path must resolve a person to
+their canonical identity *before* writing them, and dedupe on that — never on
+whatever string the source happened to return.
+
+**Store all three, always:**
+
+| Column | Value | Why |
+|---|---|---|
+| `linkedin_url` | the vanity URL, `https://www.linkedin.com/in/<public_id>` | the key; the only form every other source also produces |
+| `public_id` | the vanity slug | lets you rebuild the URL and match text mentions |
+| `linkedin_urn` | the `ACoAA…` member URN | survives a vanity-URL rename, which the URL does not |
+
+**The failure this prevents, because it is not hypothetical.** A people-search
+provider (Fresh LinkedIn `/search-employees`) returns profiles as *member-URN
+URLs* — `/in/ACwAABowLzkB0Nke…`. Those URLs work: they redirect to the vanity
+profile. So they look harmless, and a dedupe that compares URL strings sees
+them as new people. In one run, **94 of 121 "new" leads were people already in
+the database**, and 33 of them were delivered to the client a second time.
+
+Three specific traps inside that one:
+
+- **A URN is not an identity you can compare.** `/in/ACwAA…` and
+  `/in/janedoe` are the same human and match on nothing. Resolve first.
+- **URN namespaces differ between vendors.** That search returns `ACwAA…`;
+  `leads.linkedin_urn` holds `ACoAA…`. Comparing the two finds nothing and
+  proves nothing — do not conclude "no duplicates" from it.
+- **Member URNs are CASE-SENSITIVE.** Lowercasing one (easy to do while
+  normalising) turns a working URL into a 404 on every provider, which then
+  looks like "this person doesn't exist" rather than "I corrupted the key".
+
+**How to resolve.** Any profile enrichment returns the canonical set from a URN:
+Fresh LinkedIn `/enrich-lead` gives `linkedin_url`, `public_id` and an `ACoAA`
+`urn` in one call; Blitz `/v2/enrichment/person` gives `linkedin_url`. Enrich,
+then write. If a profile will not resolve to a canonical URL, **drop it and
+count it** — do not store the pointer and hope.
+
+## Trust the enriched field, not the search snippet
+
+Search endpoints return a `job_title`, `company`, and location alongside each
+hit. They are a *search index's summary*, not the profile, and they are not a
+qualification decision. Gate on an enriched field.
+
+Measured: search titles matched the enriched title 24 times out of 25 — and
+across 121 admitted members, **5 held a title that fails the very gate they
+were admitted on**. A 96%-accurate field still produces a steady trickle of
+wrong calls at volume, and each one reaches a client.
+
+Same rule for the employer. Never accept a company **name** match as proof a
+person works somewhere: two unrelated companies are both called "Brite"
+(LinkedIn ids 42321107 and 79643) and two more are both "Landmark Homes".
+Resolve both sides to a `company_linkedin_id` and compare those.
+
 ## Durability and batch progress (don't hold work in memory)
 
 Any MarketBase skill that processes more than a handful of records — qualifying a
