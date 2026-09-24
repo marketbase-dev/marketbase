@@ -141,6 +141,52 @@ def search_employees(company_id, keyword, conn, key):
     return rows, False
 
 
+def enrich_lead(url, conn, key):
+    """Canonical identity + enriched title for a profile. Cached.
+
+    /search-employees identifies people by member URN (/in/ACwAA...). Those URLs
+    redirect, but they are NOT canonical: the same person from any other source
+    will not match, and leads.linkedin_urn holds ACoAA... URNs -- a different
+    namespace -- so neither column can dedupe them. This resolves the URN to
+    `linkedin_url` (vanity), `public_id`, an ACoAA `urn`, and the real
+    `job_title`, so we store an identity rather than a pointer.
+
+    Rate-limited hard: a 429 must be retried, never recorded as "no data".
+    """
+    params = {"linkedin_url": url, "include_skills": "false"}
+    with conn.cursor() as cur:
+        cur.execute("""SELECT response FROM enrichment_calls WHERE api=%s
+                       AND endpoint='/enrich-lead' AND params=%s AND success LIMIT 1""",
+                    (PROVIDER, Jsonb(params)))
+        row = cur.fetchone()
+    if row:
+        return (row[0] or {}).get("data") or row[0] or {}
+    d, ok = {}, False
+    for attempt in range(6):
+        try:
+            d = _rapid("/enrich-lead", query=params, key=key)
+            ok = True
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                time.sleep(12 * (attempt + 1))
+                continue
+            d, ok = {"_err": f"HTTP {e.code}"}, False
+            break
+        except Exception as e:  # noqa: BLE001
+            d, ok = {"_err": f"{type(e).__name__}: {str(e)[:120]}"}, False
+            break
+    else:
+        d, ok = {"_err": "HTTP 429 after retries"}, False
+    time.sleep(3)
+    with conn.cursor() as cur:
+        cur.execute("""INSERT INTO enrichment_calls (api,endpoint,params,success,response)
+                       VALUES (%s,'/enrich-lead',%s,%s,%s)""",
+                    (PROVIDER, Jsonb(params), ok, Jsonb(d)))
+        conn.commit()
+    return (d or {}).get("data") or d or {}
+
+
 def company_linkedin_id(url, conn, blitz_key):
     body = {"company_linkedin_url": url}
     with conn.cursor() as cur:
@@ -224,7 +270,7 @@ def main() -> int:
         short = short[:args.limit]
     print(f"companies below the cap: {len(short)}\n")
 
-    added = scanned = skipped = 0
+    added = scanned = skipped = unresolved = 0
     with connect(args.client) as conn:
         cur = conn.cursor()
         for i, (cu, live, total, seeds, seed_company) in enumerate(short, 1):
@@ -258,11 +304,33 @@ def main() -> int:
                         continue
                     if not x.function_ok(ti, keep, rank):
                         continue
-                    if u.lower() in known:
+                    # Resolve the URN to a canonical identity BEFORE keeping the
+                    # person: store a vanity URL and an ACoAA urn, never the
+                    # search's ACwAA pointer, or the same human silently lands in
+                    # the table twice under two different URLs.
+                    e = enrich_lead(u, conn, rkey)
+                    canon = (e.get("linkedin_url") or "").rstrip("/")
+                    if not canon:
+                        unresolved += 1
                         continue
-                    keepers.append({"url": u, "name": p.get("full_name"), "title": ti,
-                                    "rank": rank, "location": p.get("location"),
-                                    "raw": p})
+                    # Re-gate on the ENRICHED title. A search snippet is not a
+                    # qualification decision.
+                    real_ti = e.get("job_title") or ti
+                    rank = x.rank_of(real_ti)
+                    if not rank or LADDER.index(rank) > max_i:
+                        continue
+                    if not x.function_ok(real_ti, keep, rank):
+                        continue
+                    if canon.lower() in known:
+                        continue
+                    keepers.append({"url": canon, "urn": e.get("urn"),
+                                    "public_id": e.get("public_id"),
+                                    "name": e.get("full_name") or p.get("full_name"),
+                                    "title": real_ti, "search_title": ti,
+                                    "rank": rank, "location": e.get("location"),
+                                    "employees": e.get("company_employee_count"),
+                                    "company_url": e.get("company_linkedin_url"),
+                                    "raw": p, "enriched": e})
             scanned += len(seen)
             print(f"  [{i}/{len(short)}] {str(seed_company)[:30]:30} had={live} "
                   f"scanned={len(seen):>3} new={len(keepers)}")
@@ -270,16 +338,20 @@ def main() -> int:
                 added += len(keepers)
                 continue
 
-            cur.executemany("""INSERT INTO leads (linkedin_url, name, current_title,
-                                   current_company, current_company_url, created_at, updated_at)
-                               VALUES (%s,%s,%s,%s,%s,NOW(),NOW())
+            cur.executemany("""INSERT INTO leads (linkedin_url, linkedin_urn, public_id,
+                                   name, current_title, current_company,
+                                   current_company_url, created_at, updated_at)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,NOW(),NOW())
                                ON CONFLICT (linkedin_url) DO UPDATE SET
+                                 linkedin_urn = COALESCE(leads.linkedin_urn, EXCLUDED.linkedin_urn),
+                                 public_id = COALESCE(leads.public_id, EXCLUDED.public_id),
                                  name = COALESCE(NULLIF(leads.name,''), EXCLUDED.name),
                                  current_title = COALESCE(NULLIF(leads.current_title,''),
                                                           EXCLUDED.current_title),
                                  updated_at = NOW()""",
-                            [(k["url"], k["name"], k["title"],
-                              (k["raw"].get("company") or seed_company), cu) for k in keepers])
+                            [(k["url"], k.get("urn"), k.get("public_id"), k["name"],
+                              k["title"], (k["raw"].get("company") or seed_company),
+                              k.get("company_url") or cu) for k in keepers])
             cur.execute("SELECT linkedin_url, id FROM leads WHERE linkedin_url = ANY(%s)",
                         ([k["url"] for k in keepers],))
             ids = dict(cur.fetchall())
@@ -294,7 +366,10 @@ def main() -> int:
                                      "company_linkedin_url": cu,
                                      "rank": k["rank"],
                                      "matched_title": k["title"],
+                                     "search_title": k.get("search_title"),
+                                     "company_employee_count": k.get("employees"),
                                      "provider": PROVIDER,
+                                     "identity": "canonical (enriched from member urn)",
                                      "fresh_linkedin": k["raw"]}))
                              for k in keepers if ids.get(k["url"])])
             cur.executemany("""INSERT INTO lead_tags (lead_id, tag, notes, tagged_by)
@@ -307,6 +382,7 @@ def main() -> int:
 
     print(f"\ncompanies processed : {len(short)}  (blocklisted, skipped: {skipped})")
     print(f"profiles scanned    : {scanned}")
+    print(f"dropped, no canonical profile: {unresolved}")
     print(f"members {'that would be added' if args.dry_run else 'added'}: {added}")
     if not args.dry_run and added:
         print(f"\nnext: python3 tier_expansion_candidates.py --client {args.client}")
