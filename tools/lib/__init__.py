@@ -1,16 +1,19 @@
 """Shared library for all marketbase-* skills.
 
 The convention:
-  - Each client has a Neon project (Impact 11 org).
-  - The Postgres connection string lives in ~/.env.<ClientName>
-    as <ClientName>_DATABASE_URL (e.g. ACME_DATABASE_URL).
-  - All MarketBase skills accept --client <ClientName> and read the corresponding
+  - Each MarketBase instance has a Neon project (Impact 11 org).
+  - The Postgres connection string lives in that instance's own Infisical
+    project (see ../../infisical_credentials.json), falling back to
+    ~/.env.<ClientName> for instances not yet migrated off env files.
+  - All marketbase skills accept --client <ClientName> and read the corresponding
     env file via load_client_env().
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -114,61 +117,150 @@ def load_client_env(client: str) -> dict[str, str]:
             env[k.strip()] = v.strip().strip('"').strip("'")
     for k, v in env.items():
         os.environ.setdefault(k, v)
+
+    # Infisical fills anything the env files did not provide. Deliberately
+    # LAST, so existing env-file precedence is unchanged and this is additive:
+    # secrets already migrated out of ~/.env resolve here instead.
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+        from secret_store import hydrate
+        for k in hydrate(client):
+            env.setdefault(k, os.environ[k])
+    except Exception:
+        pass
+
     return env
 
 
-def database_url(client: str) -> str:
-    """The connection string for this client's Neon DB.
+# One instance->project map for the whole machine. `configs/infisical_projects.json`
+# used to be a second, MarketBase-only registry whose presence in it *was* the
+# conversion step; that is scrapped. A client is on MarketBase because its own
+# Infisical project holds MARKETBASE_DB_CONNSTRING — the secret's existence is
+# the registration, with no second list to keep in sync.
+INFISICAL_MAP = Path(__file__).resolve().parent.parent.parent / "infisical_credentials.json"
 
-    Tries (in order):
-      1. <CLIENT>_DATABASE_URL     ← preferred convention
-      2. DATABASE_URL              ← generic
-      3. LEAD_DB_CONNSTRING        ← legacy convention used in some envs
+# Exactly one accepted name. The old chain also took DATABASE_URL and
+# GTM_DB_CONNSTRING, so a client missing its MarketBase secret connected to its
+# own LIVE gtmdb and migrated it. Named to mirror GTM_DB_CONNSTRING so the two
+# tracks read as siblings.
+DB_KEY = "MARKETBASE_DB_CONNSTRING"
+
+
+def infisical_instance(client: str) -> dict | None:
+    """The Infisical project mapping for this instance, or None if unmapped."""
+    try:
+        cfg = json.loads(INFISICAL_MAP.read_text())
+    except Exception:
+        return None
+    return (cfg.get("scopes") or {}).get(client)
+
+
+def infisical_secret(client: str, keys: tuple[str, ...]) -> str | None:
+    """Read the first present secret in `keys` from the instance's Infisical
+    project. Returns None when the instance is unmapped, the CLI is missing,
+    or no key is set — callers fall back to ~/.env.<Client>."""
+    inst = infisical_instance(client)
+    if not inst:
+        return None
+    for key in keys:
+        try:
+            r = subprocess.run(
+                ["infisical", "secrets", "get", key,
+                 "--projectId", inst["projectId"],
+                 "--env", inst.get("env", "dev"),
+                 "--plain", "--silent"],
+                capture_output=True, text=True, timeout=30)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return None
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    return None
+
+
+def discover_instances() -> list[str]:
+    """Every client whose Infisical project holds MARKETBASE_DB_CONNSTRING.
+
+    Holding that secret IS being a MarketBase instance. This deliberately does
+    NOT glob ~/.env.* the way the gtmdb toolkit does: gtmdb and MarketBase are
+    parallel tracks sharing one machine, and globbing would push MarketBase
+    migrations straight into live gtmdb client databases.
     """
-    env = load_client_env(client)
-    # Per the per-workspace-env-files convention, prefer the plain unsuffixed
-    # var names inside ~/.env.<Client>. Accept legacy variants too.
-    for key in ("GTM_DB_CONNSTRING", "DATABASE_URL",
-                f"{client.upper()}_DATABASE_URL", "LEAD_DB_CONNSTRING"):
-        url = env.get(key)
-        if url:
-            return url
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from secret_store import scoped_secret
+    try:
+        scopes = json.loads(INFISICAL_MAP.read_text()).get("scopes") or {}
+    except Exception:
+        return []
+    return sorted(sc for sc in scopes
+                  if not sc.startswith("__") and scoped_secret(DB_KEY, sc))
+
+
+def database_url(client: str) -> str:
+    """The connection string for this instance's MarketBase DB, from
+    `MARKETBASE_DB_CONNSTRING` resolved in this client's scope ONLY.
+
+    Two fallbacks used to live here and both led to the same place. Falling back
+    to GTM_DB_CONNSTRING meant a client without a MarketBase secret connected to
+    its own live gtmdb — and marketbase-init-client would have migrated it.
+    Falling through Infisical scopes (__private__ then __team__) meant resolving
+    to *Impact 11's* MarketBase database, which really does hold this key.
+    Neither failure said anything; both wrote to the wrong database.
+    """
+    load_client_env(client)   # keeps every other secret resolving as before
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from secret_store import scoped_secret
+    url = scoped_secret(DB_KEY, client)
+    if url:
+        return url
     sys.exit(
-        f"No database URL found in ~/.env.{client}. "
-        f"Expected one of: GTM_DB_CONNSTRING, DATABASE_URL, "
-        f"{client.upper()}_DATABASE_URL, LEAD_DB_CONNSTRING. "
-        f"Run marketbase-init-client first."
+        f"No {DB_KEY} for {client!r} in its own Infisical project or "
+        f"~/.env.{client}, so {client!r} is not a MarketBase instance.\n"
+        f"  If it should be, run marketbase-init-client.\n"
+        f"  If it is still on gtmdb, use ~/.claude/tools/gtmdb/ instead.\n"
+        f"(Only {DB_KEY} is accepted, and only from this client's own scope — "
+        f"the old fallbacks resolved to a live gtmdb or to another instance's "
+        f"database.)"
     )
 
 
-def _actor() -> str:
-    """Who is about to touch this database, for the audit trail.
+def connect(client: str, *, _skip_identity: bool = False):
+    """Return a psycopg connection to the instance's MarketBase DB.
 
-    Derived from the entry-point script so attribution costs callers nothing:
-    a tool that deletes tags does not have to remember to identify itself, and
-    the one that forgets is exactly the one whose history you will want later.
+    The database is asked to prove it is the one requested. This matters most
+    right after a clone, when the copy is byte-identical to its gtmdb source and
+    nothing else can tell them apart. Only the stamping tool skips the check.
     """
-    import getpass
-    import sys as _sys
-    raw = Path(_sys.argv[0]).name if _sys.argv and _sys.argv[0] else ""
-    actor = (raw or "").removesuffix(".py")
-    if actor in ("", "-", "python", "python3", "-c"):
-        # stdin, heredoc or REPL: the ad-hoc case this audit exists for, so say
-        # so plainly rather than recording a meaningless "-"
-        actor = f"adhoc:{getpass.getuser()}"
-    return actor[:60]
-
-
-def connect(client: str):
-    """Return a psycopg connection to the client's DB."""
     import psycopg
     conn = psycopg.connect(database_url(client), autocommit=False)
-    # Stamps every audit row written by triggers on this connection (see
-    # schema/050_lead_tag_removal_audit.sql). SET LOCAL would die with the
-    # first transaction, so this is session scope.
-    with conn.cursor() as cur:
-        cur.execute("SELECT set_config('marketbase.actor', %s, false)", (_actor(),))
-    conn.commit()
+    if _skip_identity:
+        return conn
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from db_identity import assert_identity
+    try:
+        assert_identity(conn, client, "marketbase")
+    except Exception:
+        conn.close()
+        raise
+    # Stamp WHO is touching this database, for the audit trail that
+    # schema/050_lead_tag_removal_audit.sql writes on every tag removal.
+    # Derived from the entry-point script so attribution costs callers nothing:
+    # the tool that forgets to identify itself is exactly the one whose history
+    # you will want later. Session scope, not SET LOCAL, which would die with
+    # the first transaction.
+    try:
+        raw = Path(sys.argv[0]).name if sys.argv and sys.argv[0] else ""
+        actor = (raw or "").removesuffix(".py")
+        if actor in ("", "-", "python", "python3", "-c"):
+            # stdin, heredoc or REPL: the ad-hoc case this audit exists for, so
+            # say so plainly rather than recording a meaningless "-"
+            import getpass
+            actor = f"adhoc:{getpass.getuser()}"
+        with conn.cursor() as _cur:
+            _cur.execute("SELECT set_config('marketbase.actor', %s, false)",
+                         (actor[:60],))
+        conn.commit()
+    except Exception:
+        pass          # attribution is never worth failing a connection over
     return conn
 
 
@@ -219,8 +311,8 @@ def upsert_company_from_qualification(cur, full_result: dict) -> str:
     COALESCE-fills empty columns (does not overwrite curated data). Returns
     the company UUID as text, or '' if there wasn't enough data to upsert.
 
-    Generic — works for any client MarketBase because the `companies` table shape
-    is part of the MarketBase migrations (see schema/001_identity.sql)."""
+    Generic — works for any client marketbase because the `companies` table shape
+    is part of the marketbase migrations (see schema/001_identity.sql)."""
     if not isinstance(full_result, dict):
         return ""
     name = (full_result.get("current_company") or "").strip()
@@ -257,7 +349,7 @@ def upsert_company_from_qualification(cur, full_result: dict) -> str:
 
 
 def register_processor_from_yaml(client: str, yaml_text: str, *, created_by: str | None = None) -> tuple[str, str, str]:
-    """UPSERT a processor row in the client's MarketBase from a YAML spec.
+    """UPSERT a processor row in the client's marketbase from a YAML spec.
 
     Returns (name, version, action) where action is 'inserted' or 'updated'.
 
