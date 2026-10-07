@@ -59,23 +59,41 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import connect, normalize_linkedin_url
 
 
-# Every table with a lead_id FK → leads(id), mapped to the columns (besides
-# lead_id) of its lead-scoped unique key. A row from a duplicate can move to the
-# canonical only if the canonical has no row with the same values in those
-# columns; collisions are deleted (the canonical already has the equivalent).
-# Empty list = no lead-scoped unique key → every row moves unconditionally.
+# Every table with a FK → leads(id), mapped to how its rows follow a merge:
+#   fk        the referencing column (default "lead_id"; the assertion/signal
+#             tables call it "subject_lead_id")
+#   uniq      the columns (besides fk) of its lead-scoped unique key. A row from
+#             a duplicate can move to the canonical only if the canonical has no
+#             row with the same values in those columns; colliding rows are
+#             deleted (the canonical already has the equivalent) — EXCEPT where
+#   collision "soft_remove": assertions are append-only audit rows and are never
+#             deleted; a colliding ACTIVE assertion is closed (removed_at /
+#             removed_by) and then moved, so the history survives under the
+#             canonical. Its unique index is partial (WHERE removed_at IS NULL,
+#             NULLS NOT DISTINCT), which "active_col" mirrors.
+# Empty uniq = no lead-scoped unique key → every row moves unconditionally.
 # Verified against information_schema / pg_indexes for the Acme DB.
 CHILD_SPEC = {
-    "campaign_members":    ["campaign_id"],
-    "enrichment_calls":    [],                          # FK is SET NULL, pkey only
-    "lead_actions":        [],
-    "lead_conversations":  ["operator_id", "channel"],  # uq_lconv_operator_lead_channel
-    "lead_meetings":       [],
-    "lead_qualifications": [],
-    "lead_signals":        ["enricher_name", "enricher_version"],
-    "lead_sources":        [],
-    "lead_tags":           ["tag"],                     # uq_lead_tags_lead_tag
-    "post_engagements":    [],
+    "campaign_members":    {"uniq": ["campaign_id"]},
+    "enrichment_calls":    {"uniq": []},                # FK is SET NULL, pkey only
+    "lead_actions":        {"uniq": []},
+    "lead_conversations":  {"uniq": ["operator_id", "channel"]},  # uq_lconv_operator_lead_channel
+    "lead_meetings":       {"uniq": []},
+    "lead_qualifications": {"uniq": []},
+    "lead_signals":        {"uniq": ["enricher_name", "enricher_version"]},
+    "lead_sources":        {"uniq": []},
+    "lead_tags":           {"uniq": ["tag"]},           # uq_lead_tags_lead_tag
+    "post_engagements":    {"uniq": []},
+    # uq_lead_identities_kind_value is GLOBAL (kind, value), not lead-scoped, so
+    # a move can never collide; two rows of the same kind on one lead are legal
+    # (is_primary is a flag, not a key).
+    "lead_identities":     {"uniq": []},
+    "signals":             {"fk": "subject_lead_id", "uniq": []},
+    "assertions":          {"fk": "subject_lead_id",
+                            "uniq": ["subject_company_id", "subject_company_edge_id",
+                                     "subject_post_engagement_id",
+                                     "subject_conversation_id", "namespace", "key"],
+                            "collision": "soft_remove", "active_col": "removed_at"},
 }
 
 # leads scalar columns we COALESCE-fill onto the canonical from duplicates so a
@@ -238,23 +256,46 @@ def pick_canonical(rows: list[dict]) -> dict:
 
 
 def merge_group(cur, canon_id, dup_ids: list, stats: dict) -> None:
-    for table, dedupe_cols in CHILD_SPEC.items():
+    for table, spec in CHILD_SPEC.items():
+        fk = spec.get("fk", "lead_id")
+        dedupe_cols = spec["uniq"]
         for dup in dup_ids:
-            if dedupe_cols:
+            if dedupe_cols and spec.get("collision") == "soft_remove":
+                # Append-only audit table: close the duplicate's ACTIVE rows
+                # whose equivalent is already active on the canonical (the
+                # unique index only covers active rows), then move EVERYTHING —
+                # closed rows included — so no history is ever deleted.
+                active = spec["active_col"]
                 cond = " AND ".join(
                     f"x.{c} IS NOT DISTINCT FROM t.{c}" for c in dedupe_cols
                 )
                 cur.execute(f"""
-                    UPDATE {table} t SET lead_id = %s
-                     WHERE t.lead_id = %s
+                    UPDATE {table} t
+                       SET {active} = now(), removed_by = 'dedupe_leads:merge'
+                     WHERE t.{fk} = %s AND t.{active} IS NULL
+                       AND EXISTS (SELECT 1 FROM {table} x
+                                    WHERE x.{fk} = %s AND x.{active} IS NULL
+                                      AND {cond})
+                """, (dup, canon_id))
+                stats[f"{table}:collisions_soft_removed"] += cur.rowcount
+                cur.execute(f"UPDATE {table} SET {fk} = %s WHERE {fk} = %s",
+                            (canon_id, dup))
+                stats[f"{table}:moved"] += cur.rowcount
+            elif dedupe_cols:
+                cond = " AND ".join(
+                    f"x.{c} IS NOT DISTINCT FROM t.{c}" for c in dedupe_cols
+                )
+                cur.execute(f"""
+                    UPDATE {table} t SET {fk} = %s
+                     WHERE t.{fk} = %s
                        AND NOT EXISTS (SELECT 1 FROM {table} x
-                                        WHERE x.lead_id = %s AND {cond})
+                                        WHERE x.{fk} = %s AND {cond})
                 """, (canon_id, dup, canon_id))
                 stats[f"{table}:moved"] += cur.rowcount
-                cur.execute(f"DELETE FROM {table} WHERE lead_id = %s", (dup,))
+                cur.execute(f"DELETE FROM {table} WHERE {fk} = %s", (dup,))
                 stats[f"{table}:collisions_deleted"] += cur.rowcount
             else:
-                cur.execute(f"UPDATE {table} SET lead_id = %s WHERE lead_id = %s",
+                cur.execute(f"UPDATE {table} SET {fk} = %s WHERE {fk} = %s",
                             (canon_id, dup))
                 stats[f"{table}:moved"] += cur.rowcount
 
@@ -385,10 +426,13 @@ def main() -> int:
             return 0
 
         stats = {"groups": 0, "leads:deleted": 0}
-        for t in CHILD_SPEC:
+        for t, spec in CHILD_SPEC.items():
             stats[f"{t}:moved"] = 0
-            if CHILD_SPEC[t]:
-                stats[f"{t}:collisions_deleted"] = 0
+            if spec["uniq"]:
+                suffix = ("collisions_soft_removed"
+                          if spec.get("collision") == "soft_remove"
+                          else "collisions_deleted")
+                stats[f"{t}:{suffix}"] = 0
 
         for _group_key, ids in groups:
             # Re-fetch full rows for canonical selection.
