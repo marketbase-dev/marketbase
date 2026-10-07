@@ -255,7 +255,8 @@ def pick_canonical(rows: list[dict]) -> dict:
     return sorted(rows, key=key, reverse=True)[0]
 
 
-def merge_group(cur, canon_id, dup_ids: list, stats: dict) -> None:
+def merge_group(cur, canon_id, dup_ids: list, stats: dict,
+                inherit_public_id: bool = True) -> None:
     for table, spec in CHILD_SPEC.items():
         fk = spec.get("fk", "lead_id")
         dedupe_cols = spec["uniq"]
@@ -322,15 +323,20 @@ def merge_group(cur, canon_id, dup_ids: list, stats: dict) -> None:
     # The deleted twin's URL string disappears with it. If the survivor has no
     # vanity handle yet, inherit the twin's so a later vanity re-upload still
     # resolves to this person (lib.resolve_canonical_url → public_id fallback).
-    cur.execute("""
-        UPDATE leads c SET public_id = d.slug
-        FROM (SELECT substring(linkedin_url from '/in/([^/?#]+)') AS slug
-              FROM leads
-              WHERE id = ANY(%s) AND linkedin_url !~ '/in/AC'
-                AND substring(linkedin_url from '/in/([^/?#]+)') IS NOT NULL
-              ORDER BY updated_at DESC LIMIT 1) d
-        WHERE c.id = %s AND c.public_id IS NULL
-    """, (dup_ids, canon_id))
+    # SKIPPED in urn-case mode: there the twin's URL is a LOWERCASED member
+    # URN, which the '/in/AC' test cannot see (it is case-sensitive), and
+    # inheriting it would stamp a permanently dead identity as the vanity
+    # handle.
+    if inherit_public_id:
+        cur.execute("""
+            UPDATE leads c SET public_id = d.slug
+            FROM (SELECT substring(linkedin_url from '/in/([^/?#]+)') AS slug
+                  FROM leads
+                  WHERE id = ANY(%s) AND linkedin_url !~ '/in/AC'
+                    AND substring(linkedin_url from '/in/([^/?#]+)') IS NOT NULL
+                  ORDER BY updated_at DESC LIMIT 1) d
+            WHERE c.id = %s AND c.public_id IS NULL
+        """, (dup_ids, canon_id))
 
     cur.execute("DELETE FROM leads WHERE id = ANY(%s)", (dup_ids,))
     stats["leads:deleted"] += cur.rowcount
@@ -343,10 +349,14 @@ def main() -> int:
     p.add_argument("--execute", action="store_true",
                    help="Commit the merge (default: dry-run + rollback).")
     p.add_argument("--limit", type=int, help="Process only the first N groups.")
-    p.add_argument("--key", choices=("urn", "url"), default="urn",
+    p.add_argument("--key", choices=("urn", "url", "urn-case"), default="urn",
                    help="urn (default): group by member_urn. "
                         "url: group by the NORMALISED linkedin_url, then "
-                        "rewrite every row to its normalised form.")
+                        "rewrite every row to its normalised form. "
+                        "urn-case: merge the member-URN CASE collisions url "
+                        "mode only reports — canonical is ALWAYS the "
+                        "case-preserved row (a lowercased URN 404s, so the "
+                        "survivor must be the usable identity).")
     args = p.parse_args()
 
     mode = "EXECUTE" if args.execute else "DRY-RUN"
@@ -373,6 +383,24 @@ def main() -> int:
                         print(f"      lead {lead_id}  urn={'yes' if urn else 'no ':3}"
                               f"  {preserved:14} {url}")
                 print()
+        elif args.key == "urn-case":
+            # The merge url mode refuses: same member URN, different CASE. The
+            # rule is fixed (keep the case-preserved row — the lowercased URL
+            # is permanently dead against saleleads / Fresh), so once a human
+            # says go, this applies it. The canonical is decided HERE, by the
+            # rule, never by pick_canonical: freshness must not be able to
+            # crown the dead identity. Groups without exactly one
+            # case-preserved row stay human problems.
+            groups = []
+            for key, crows in urn_case_collisions(cur):
+                preserved = [r for r in crows if r[1] != r[1].lower()]
+                lowered = [r for r in crows if r[1] == r[1].lower()]
+                if len(preserved) == 1 and lowered:
+                    groups.append(
+                        (key, [preserved[0][0]] + [r[0] for r in lowered]))
+                else:
+                    print(f"  ⚠ urn {key[:18]}… has {len(preserved)} "
+                          "case-preserved row(s) — left for a human.")
         else:
             # Group only on URN-SHAPED values. An empty string is not an
             # identity and neither is a truncated handle, but both are NOT
@@ -443,9 +471,15 @@ def main() -> int:
             """, (ids,))
             cols = [d.name for d in cur.description]
             rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-            canon = pick_canonical(rows)
+            if args.key == "urn-case":
+                # ids[0] IS the rule's canonical (the case-preserved row);
+                # pick_canonical must not get a vote — see the mode's comment.
+                canon = next(r for r in rows if r["id"] == ids[0])
+            else:
+                canon = pick_canonical(rows)
             dup_ids = [r["id"] for r in rows if r["id"] != canon["id"]]
-            merge_group(cur, canon["id"], dup_ids, stats)
+            merge_group(cur, canon["id"], dup_ids, stats,
+                        inherit_public_id=(args.key != "urn-case"))
 
         print("\n=== merge stats ===")
         for k, v in stats.items():
