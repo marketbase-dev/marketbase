@@ -65,13 +65,45 @@ def sort_key(row) -> tuple:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--client", required=True)
-    ap.add_argument("--cap", type=int, default=5)
+    # The hand-over cap belongs to the CLIENT, not to whoever types the command:
+    # it is the number of people they agreed to receive per company. Read it from
+    # the targeting profile so a re-tier cannot quietly change the deal, and keep
+    # the flag as an explicit override for what-if runs.
+    ap.add_argument("--cap", type=int, default=None,
+                    help="per-company hand-over cap; defaults to the client's "
+                         "targeting_profile buying_committee.handover_cap, else 5")
     ap.add_argument("--source-type", default="buying_committee_expansion")
     ap.add_argument("--active-tag", default="expansion:buying_committee")
     ap.add_argument("--qualified-tag", default="expansion:qualified")
     ap.add_argument("--backup-tag", default="expansion:backup")
+    # Tiering RECOMPUTES from scratch, so anything a human deliberately took out
+    # of circulation is silently promoted again on the next run. A hold has to
+    # be a fact about the lead that tiering reads, not a one-off sweep.
+    ap.add_argument("--hold-tags", default="expansion:stale,expansion:filtered_out",
+                    help="comma-separated tags that exclude a member from tiering; "
+                         "these are deliberate holds (out of date window, geo "
+                         "screened out, partner-type firm) and must survive a re-run")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
+
+    hold_tags = [t.strip() for t in (args.hold_tags or "").split(",") if t.strip()]
+
+    if args.cap is None:
+        args.cap = 5
+        try:
+            import yaml
+            with connect(args.client) as _c, _c.cursor() as _cu:
+                _cu.execute("SELECT yaml_spec FROM processors "
+                            "WHERE processor_type='targeting_profile' "
+                            "AND superseded_by IS NULL ORDER BY created_at DESC LIMIT 1")
+                _r = _cu.fetchone()
+            if _r:
+                _cap = (yaml.safe_load(_r[0]) or {}).get("buying_committee", {}).get("handover_cap")
+                if _cap:
+                    args.cap = int(_cap)
+                    print(f"hand-over cap {args.cap} from the {args.client} targeting profile")
+        except Exception as _e:
+            print(f"could not read handover_cap from the profile ({_e}); using {args.cap}")
 
     with connect(args.client) as conn:
         with conn.cursor() as cur:
@@ -84,8 +116,10 @@ def main() -> int:
                 JOIN leads l ON l.id = s.lead_id
                 JOIN lead_tags t ON t.lead_id = l.id AND t.tag = %s
                 WHERE s.source_type = %s
+                  AND NOT EXISTS (SELECT 1 FROM lead_tags h
+                                  WHERE h.lead_id = l.id AND h.tag = ANY(%s))
                 ORDER BY l.id, s.raw_data->>'company_linkedin_url'
-            """, (args.active_tag, args.source_type))
+            """, (args.active_tag, args.source_type, hold_tags))
             rows = cur.fetchall()
 
             by_company: dict[str, list] = defaultdict(list)
@@ -122,8 +156,11 @@ def main() -> int:
 
             if not args.dry_run:
                 # Recompute from scratch so re-runs with a different --cap are clean.
-                cur.execute("DELETE FROM lead_tags WHERE tag IN (%s, %s)",
-                            (args.qualified_tag, args.backup_tag))
+                cur.execute("""DELETE FROM lead_tags WHERE tag IN (%s, %s)
+                               AND NOT EXISTS (SELECT 1 FROM lead_tags h
+                                               WHERE h.lead_id = lead_tags.lead_id
+                                                 AND h.tag = ANY(%s))""",
+                            (args.qualified_tag, args.backup_tag, hold_tags))
                 cur.executemany("""INSERT INTO lead_tags (lead_id, tag, notes, tagged_by)
                                    VALUES (%s,%s,%s,'tier_expansion_candidates')
                                    ON CONFLICT (lead_id, tag) DO NOTHING""",
