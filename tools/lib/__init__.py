@@ -16,17 +16,57 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 
 _URL_PARTS_RE = re.compile(r"^(https?://)?([^/]+)(/.*)?$", re.I)
 
+def _decode_path(path: str) -> str:
+    """Percent-decode a URL path until it stops changing (bounded).
+
+    A name with a non-ASCII or reserved character reaches us in two or three
+    forms — literal, and percent-encoded with either hex case:
+
+        /in/jose-nunez-000000000           (literal, accent elided here)
+        /in/jose-nu%C3%B1ez-000000000
+        /in/jose-nu%c3%b1ez-000000000      <- same bytes, different hex case
+
+    All three are one person and one LinkedIn page. Comparing the strings says
+    they are three, which is how one DB grew three rows for one seller, and how
+    two DBs ended up monitoring 22 people twice (measured 2026-10-07).
+
+    Decoding is the only operation that collapses them: no case fold or string
+    tidy can, because the forms differ in the *encoding* of the character, not
+    in the character. And decoding is the safe direction -- the decoded form is
+    what LinkedIn displays and what a human pastes, so it is the form every new
+    row already arrives in.
+
+    LOOPED, not single-pass, so the function is idempotent: a double-encoded
+    `%2520` would decode to `%20` on one pass and to a space on the next, and a
+    key that changes when you re-normalise it is not a key. Three passes is far
+    past anything real; beyond that we keep what we have rather than spin.
+
+    Case is never touched. Percent-encoding hex case is insignificant for the
+    byte it encodes, but handle and URN case ARE significant (`/in/ACoAA...`
+    404s if lowercased), so those are different operations on different parts
+    of the string -- which is why "normalise the URL" is too vague to be safe.
+    """
+    for _ in range(3):
+        decoded = unquote(path)
+        if decoded == path:
+            break
+        path = decoded
+    return path
+
+
 def normalize_linkedin_url(u: str | None) -> str:
     """Canonical form used as the unique key for leads.linkedin_url.
 
-    Lowercases scheme + host. PRESERVES path case — LinkedIn's URN-encoded
-    slugs (`/in/ACoAA...`, `/in/ACwAA...`) are case-sensitive when used
-    against the saleleads / Fresh LinkedIn APIs. Strips trailing slash,
-    query string, and fragment. Forces www.linkedin.com host."""
+    Lowercases scheme + host, and percent-decodes the path (see _decode_path).
+    PRESERVES path case — LinkedIn's URN-encoded slugs (`/in/ACoAA...`,
+    `/in/ACwAA...`) are case-sensitive when used against the saleleads / Fresh
+    LinkedIn APIs. Strips trailing slash, query string, and fragment. Forces
+    www.linkedin.com host."""
     if not u: return ""
     u = u.strip()
     if not u: return ""
@@ -36,12 +76,14 @@ def normalize_linkedin_url(u: str | None) -> str:
     m = _URL_PARTS_RE.match(u)
     if not m:
         # Bare path or junk — return stripped/case-preserved with trailing slash off
-        return u.rstrip("/")
+        return _decode_path(u.rstrip("/"))
     scheme = (m.group(1) or "https://").lower()
     if scheme == "http://": scheme = "https://"
     host = (m.group(2) or "").lower()
     if host == "linkedin.com": host = "www.linkedin.com"
-    path = (m.group(3) or "").rstrip("/")
+    # Decode the path only. A host does not carry percent-escapes in any URL we
+    # ingest, and decoding one would be a quiet way to rewrite a domain.
+    path = _decode_path((m.group(3) or "").rstrip("/"))
     return f"{scheme}{host}{path}"
 
 

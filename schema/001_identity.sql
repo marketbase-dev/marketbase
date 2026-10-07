@@ -10,7 +10,11 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";  -- gen_random_uuid()
 
 CREATE TABLE IF NOT EXISTS leads (
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    linkedin_url        text UNIQUE NOT NULL,        -- normalized, lowercase, no trailing slash, no query
+    linkedin_url        text UNIQUE NOT NULL,        -- lib.normalize_linkedin_url: lowercase SCHEME+HOST only,
+                                                    -- percent-decoded path, no trailing slash, no query/fragment.
+                                                    -- PATH CASE IS PRESERVED: /in/ACoAA… URNs and vanity handles
+                                                    -- are case-sensitive and 404 if folded. Said "lowercase"
+                                                    -- until 2026-10-07, which instructed exactly that bug.
     linkedin_urn        text,                         -- /in/ACoAA... or vanity slug
     public_id           text,                         -- vanity slug if available
     name                text,
