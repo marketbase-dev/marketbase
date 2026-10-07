@@ -42,3 +42,31 @@ COMMENT ON COLUMN territory_policy.source IS
     'The artifact this came from, citable: a call transcript id, a doc, a person and a date.';
 COMMENT ON COLUMN territory_policy.rationale IS
     'Why this is the territory. Written for whoever reads it in six months.';
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- NOT superseded. An earlier version of this comment said it was; that was
+-- wrong and is retracted here.
+--
+-- Two different facts share this table's subject, and conflating them is what
+-- produced the wrong conclusion:
+--
+--   WHERE a client sells      -> processors, type 'targeting_profile',
+--                                `yaml_spec -> shared.geo`. Authoritative for
+--                                audience membership; backfill_audience_tags
+--                                reads it and nothing else.
+--   HOW a report GROUPS that  -> this table's `region_groups` (migration 052).
+--                                A presentation concern with no equivalent in
+--                                targeting_profile, which is why it lives here.
+--
+-- `regions` is the filter, `region_groups` is the rendering, and
+-- competitor_salesforce_report reads this table for the latter while
+-- cross-checking the former against targeting_profile -- refusing to render if
+-- the two disagree. That check is the right design and depends on both stores
+-- existing.
+--
+-- The retracted claim came from reading the table as empty and assuming no
+-- consumer. It was empty in the instance I looked at, at the moment I looked;
+-- another session populated it and extended it the same week. "No rows today"
+-- is not "no consumer" -- the same mistake as treating a retrieval failure as
+-- evidence of absence.
+-- ──────────────────────────────────────────────────────────────────────────
