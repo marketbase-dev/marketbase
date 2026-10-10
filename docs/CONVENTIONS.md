@@ -36,6 +36,50 @@ When in doubt, ask: "Would a brand-new client onboarded tomorrow need this
 change applied?" If yes, it's a migration. If no, it's a one-shot or an
 application-layer concern.
 
+## `leads` means "a researched person", NOT "a sales lead"
+
+**The table name is wrong and you should read it as `researched_people`.** It
+holds every person any sourcing path has ever resolved, and on a mature instance
+the clear majority of them are people the client will never sell to. Measured on
+one instance, 2026-10-10:
+
+| what the row actually is | share of `leads` |
+| --- | --- |
+| **a competitor's sales rep — can never be a lead** | **69%** |
+| buying-committee expansion candidate | 21% |
+| monitored prospect flagged by connection tracking | 6% |
+| no source row yet | 3% |
+
+A competitor rep is someone we **monitor**; a lead is someone the client
+**sells to**. Those are different relationships to the same shape of row, and
+the table name asserts one of them for all of them.
+
+**Why this is a correctness concern and not a naming nit.** Vocabulary licenses
+behaviour. Reading the table as "leads" is what made it feel natural to tag a
+competitor's employee `qualified_competitor_rep` — a single tag meaning both
+"mine their public activity" and "watch who they connect to" — which is how
+sales-operations staff reached a live monitoring workspace and 41 departed reps
+stayed in a client-facing export. The two-audience split
+(`competitor_activity_source` vs `competitor_connection_target`) exists to undo
+that conflation, and it reads as redundant until you notice the table name was
+lying about what its rows are.
+
+**What to do until it is renamed:**
+
+- **Never infer lead-ness from the table.** Lead-ness is a ROLE a row may hold,
+  carried by `lead_sources.source_type` and by tags — not by its presence in
+  `leads`. `source_type='find_competitor_salesperson'` means "not a lead".
+- **Say what you mean in new names.** Do not add more columns, tags, views or
+  tools whose names assume every row is a prospect.
+- **Read `lead_tags` as "tags on a researched person".** It is named after its
+  foreign key, which is the honest thing for it to be named after.
+
+A rename touches every table, view, tool and skill that says "lead" and is
+tracked as its own piece of work in `TODO.md (private)`. This note exists so
+the confusion stops compounding in the meantime: the next person to read the
+schema should not have to re-derive that 69% of a table called `leads` is not
+leads.
+
 ## Lead identity: store the canonical profile, never a pointer
 
 `leads` is keyed on `linkedin_url`, so **whatever you store as that URL decides
