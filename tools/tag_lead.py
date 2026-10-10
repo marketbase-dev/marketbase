@@ -10,7 +10,7 @@ differ from `lead_sources` (immutable provenance) and `lead_qualifications`
 Usage:
   # Tag a single lead
   python3 tag_lead.py --client Acme-AI \
-    --lead-url https://www.linkedin.com/in/john-q-public/ \
+    --lead-url https://www.linkedin.com/in/jane-doe/ \
     --tag thought-leader --notes "Carousel 1 participant" --tagged-by claude
 
   # Tag many leads from a CSV/XLSX (column auto-detected: linkedin_url, profile_url, url)
