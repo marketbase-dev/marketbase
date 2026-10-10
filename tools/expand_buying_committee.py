@@ -263,7 +263,8 @@ def company_matches(name_key: str, blocked_key: str) -> bool:
 
     Token-prefix, NOT substring. A raw substring test makes "EY" match "attorney",
     "Berkeley" and "beyond", which silently drops real prospects. Prefix matching
-    still catches "Northwind" vs "Northwind Planning Suite"."""
+    still catches a two-word parent brand against its longer product-suite name
+    ("Northwind" vs "Northwind Planning Suite")."""
     if not name_key or not blocked_key:
         return False
     a, b = name_key.split(), blocked_key.split()
@@ -516,7 +517,8 @@ def main() -> int:
                     continue
                 nk = norm_company(cname)
                 # exact normalised match first; containment is the fallback
-                # ("Northwind" seed vs "Northwind Software" on LinkedIn)
+                # (a seed name vs the same company carrying a suffix on
+                # LinkedIn, e.g. "Northwind" vs "Northwind Software")
                 score = 2 if nk == key else (1 if key and (key in nk or nk in key) else 0)
                 if not score:
                     continue

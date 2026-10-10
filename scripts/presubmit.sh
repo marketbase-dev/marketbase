@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # MarketBase pre-submit scanner.
 #
-# Two layers:
+# Three layers, deliberately different in kind:
 #   1. Generic secret + PII patterns (safe to publish, lives in this repo)
 #   2. A private denylist of client/person names. It is NEVER a file in this
 #      repo: putting real client names in a public repo would leak the very
@@ -189,6 +189,36 @@ else
     echo
     FAIL=1
   fi
+fi
+
+# --- Layer 3: a model pass over the diff ---
+#
+# Layers 1 and 2 match literals. Three kinds of leak walk past them, all three
+# observed rather than imagined: a company whose name IS an ordinary English
+# word (so it cannot be denylisted without blocking normal prose - ~38 real
+# names are absent from Layer 2 for exactly this reason), a company nobody has
+# added to the list yet, and a description that identifies a client without
+# naming it. Layer 3 asks the question a reviewer would ask instead of matching
+# a string. See scripts/presubmit_layer3.py.
+#
+# It judges the DIFF, not the tree: a leak that is already committed is Layer
+# 2's problem to catch on a full scan, and re-judging the whole repo on every
+# commit would cost a fortune and say the same thing every time.
+if [ -x scripts/presubmit_layer3.py ] || [ -f scripts/presubmit_layer3.py ]; then
+  if [ "${1:-}" = "--staged" ]; then
+    _diff=$(git diff --cached -- . ':(exclude)scripts/presubmit.sh')
+  else
+    # Full-tree mode has no diff to judge; compare against the default branch
+    # so a local branch still gets reviewed before it becomes a PR.
+    _base=$(git merge-base HEAD origin/main 2>/dev/null || echo "")
+    _diff=$([ -n "$_base" ] && git diff "$_base"..HEAD -- . ':(exclude)scripts/presubmit.sh' || echo "")
+  fi
+  if [ -n "$_diff" ]; then
+    if ! printf '%s\n' "$_diff" | python3 scripts/presubmit_layer3.py; then
+      FAIL=1
+    fi
+  fi
+  unset _diff _base
 fi
 
 if [ "$FAIL" -ne 0 ]; then
