@@ -8,8 +8,9 @@ all three observed rather than imagined:
   1. A company whose name IS an ordinary English word. Matching is
      letter-boundary, so a short acronym is safe inside a longer word -- but a
      term that stands alone as English hits normal prose every time. On the
-     2026-10-10 refresh, suffix-stripping "<Word> Security" off real names produced ordinary words and
-     a SQL type name, each of which blocked legitimate text here on the
+     2026-10-10 refresh, suffix-stripping "<Word> Security" off three real
+     company names produced three ordinary English words, and a fourth name
+     collides with a SQL type, so all four blocked legitimate text here on the
      first run. ~38 real company names are therefore absent from Layer 2 on
      purpose, including several direct competitors of clients.
   2. A company nobody has added to the list yet -- a prospect from this week, a
@@ -35,6 +36,9 @@ Reads the diff from stdin. Exits 0 for clean or unavailable, 1 for a finding.
   ./scripts/presubmit.sh            # runs this automatically when a key exists
   SKIP_LAYER3=1 ./scripts/presubmit.sh
   LAYER3_BLOCK_ON_ERROR=1 ...       # make an unreachable API fail too
+
+The watch list of names Layer 2 cannot carry lives in Infisical, secret
+SANITIZE_LAYER3_WATCHLIST in the same project as SANITIZE_DENYLIST.
 """
 import json
 import os
@@ -99,19 +103,51 @@ their time and teaches them to pass --no-verify."""
 
 
 def _watchlist() -> str:
-    """Names Layer 2 cannot carry. Kept beside the denylist, never in this repo."""
-    for src in (os.environ.get("LAYER3_WATCHLIST_FILE"),
-                os.path.expanduser("~/.claude/.layer3-watchlist")):
-        if src and os.path.exists(src):
-            terms = [l.strip() for l in open(src) if l.strip()
-                     and not l.strip().startswith("#")]
-            if terms:
-                return ", ".join(terms)
-    inline = os.environ.get("LAYER3_WATCHLIST", "").strip()
+    """Names Layer 2 cannot carry, resolved the way the denylist is.
+
+    SOURCE OF TRUTH: Infisical, secret SANITIZE_LAYER3_WATCHLIST in the same
+    dedicated "Repo Sanitization" project that holds SANITIZE_DENYLIST. One
+    copy, so it cannot drift between a laptop, a second laptop and CI, and a new
+    machine inherits it by logging in rather than by someone remembering to copy
+    a dotfile. It lived in a local file for exactly one commit, which was one
+    commit too many: a list that exists only on the machine that wrote it is a
+    list the next machine silently does not have.
+
+    Its own project for the same reason the denylist has one: Infisical grants
+    access per PROJECT, so a CI identity able to read this list inside a shared
+    project could read every vendor key and database URL in it too.
+
+    Resolution order matches presubmit.sh: $SANITIZE_LAYER3_WATCHLIST (CI passes
+    it in) -> $LAYER3_WATCHLIST_FILE -> Infisical.
+    """
+    inline = os.environ.get("SANITIZE_LAYER3_WATCHLIST", "").strip()
     if inline:
-        return inline
-    # Absent is not fatal: the model still judges the diff on its own terms,
-    # it just loses the focused hint for the ordinary-word names.
+        return ", ".join(t.strip() for t in inline.splitlines()
+                         if t.strip() and not t.strip().startswith("#"))
+    path = os.environ.get("LAYER3_WATCHLIST_FILE")
+    if path and os.path.exists(path):
+        terms = [l.strip() for l in open(path) if l.strip()
+                 and not l.strip().startswith("#")]
+        if terms:
+            return ", ".join(terms)
+    try:
+        r = subprocess.run(
+            ["infisical", "secrets", "get", "SANITIZE_LAYER3_WATCHLIST",
+             "--projectId", os.environ.get(
+                 "SANITIZE_PROJECT_ID", "d2dbbd59-447f-4fc2-98d2-6ab0acded9fe"),
+             "--env", os.environ.get("INFISICAL_ENV", "dev"),
+             "--plain", "--silent"],
+            capture_output=True, text=True, timeout=30)
+        if r.returncode == 0 and r.stdout.strip():
+            return ", ".join(t.strip() for t in r.stdout.splitlines()
+                             if t.strip() and not t.strip().startswith("#"))
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    # Absent is not fatal: the model still judges the diff on its own terms, it
+    # just loses the focused hint for the ordinary-word names. Say so, so a run
+    # without it is visible rather than silently less careful.
+    print("  ! Layer 3: no watch list available (SANITIZE_LAYER3_WATCHLIST) — "
+          "judging on context alone.")
     return "(no watch list available — judge on context alone)"
 
 
