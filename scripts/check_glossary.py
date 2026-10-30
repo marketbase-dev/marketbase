@@ -138,13 +138,14 @@ def report(hits) -> int:
 
 def self_test(terms) -> int:
     should_hit = ["the lead DB has it", "lead-database rows", "gtmdb track",
-                  "tag = 'state:removed_from_monitoring'", "excluded:sdr_bdr",
+                  "tag = 'state:removed_from_monitoring'", "tag = 'excluded:sdr_bdr'",
                   "excluded_target", "reason manual_removal", "removed from monitoring",
                   "kick_connection_send"]
     should_pass = ["MarketBase holds it", "ignored:comp_intel_target",
                    "excluded_role:investor", "leading database vendor",
                    "state:removed_from_monitoring glossary-ok", "kick_connection_worker",
-                   "exclude_targets()", "lead_db_track"]
+                   "exclude_targets()", "lead_db_track", "bridge.lead_db(client)",
+                   "drop label excluded:sdr_bdr"]
     bad = [s for s in should_hit if not scan_lines([s], terms)]
     bad += [s for s in should_pass if scan_lines([s], terms)]
     if bad:
