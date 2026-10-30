@@ -1,6 +1,11 @@
 [
   {
-    "pattern": "\\blead[ _-]?(db|database)s?\\b",
+    "pattern": "\\blead[ -]?dbs?\\b",
+    "use_instead": "MarketBase (the bridge's `lead_db()` / `lead_db_track()` identifiers are not matched; they rename when the bridge does)",
+    "retired": "2026-10-30"
+  },
+  {
+    "pattern": "\\blead[ _-]?databases?\\b",
     "use_instead": "MarketBase",
     "retired": "2026-10-30"
   },
@@ -30,8 +35,8 @@
     "retired": "2026-10-30"
   },
   {
-    "pattern": "\\bexcluded:[a-z_]+",
-    "use_instead": "the tag `ignored:comp_intel_target` with `excluded_role:<role>`",
+    "pattern": "['\"]excluded:[a-z_]+['\"]",
+    "use_instead": "the tag `ignored:comp_intel_target` with `excluded_role:<role>` (the quoted form is the tag; `excluded:<bucket>` as a drop label in an export column is not retired)",
     "retired": "2026-10-30"
   },
   {
