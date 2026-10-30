@@ -71,6 +71,14 @@ ln -sf ../../scripts/presubmit.sh .git/hooks/pre-commit
 It blocks commits containing API keys, private keys, database URLs with inline
 passwords, local absolute paths, and real email addresses.
 
+It also holds the vocabulary to one name per thing: `scripts/check_glossary.py`
+fails any line a commit *adds* that uses a retired term listed in
+`scripts/glossary-retired.json` (for example, a client's database is a
+**MarketBase instance**, and a target that stopped being monitored is
+**ignored**). Existing lines are not scanned. A new line that must name an old
+term - a migration renaming it, a comment explaining it - carries the token
+`glossary-ok`.
+
 If you maintain a fork that pulls from a private codebase, also copy
 `.sanitize-denylist.example` to `.sanitize-denylist` and add the customer,
 colleague, and internal project names your fork must never publish. That file is

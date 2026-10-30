@@ -1,0 +1,52 @@
+[
+  {
+    "pattern": "\\blead[ _-]?(db|database)s?\\b",
+    "use_instead": "MarketBase",
+    "retired": "2026-10-30"
+  },
+  {
+    "pattern": "\\bgtmdb\\b",
+    "use_instead": "MarketBase (gtmdb was deleted 2026-10-09)",
+    "retired": "2026-10-30"
+  },
+  {
+    "pattern": "state:removed_from_monitoring",
+    "use_instead": "the tag `ignored:comp_intel_target`",
+    "retired": "2026-10-30"
+  },
+  {
+    "pattern": "state:ignored_in_workspace",
+    "use_instead": "the tag `ignored:comp_intel_target`",
+    "retired": "2026-10-30"
+  },
+  {
+    "pattern": "state:suppressed_in_workspace",
+    "use_instead": "the tag `ignored:comp_intel_target`",
+    "retired": "2026-10-30"
+  },
+  {
+    "pattern": "\\bexcluded_target\\b",
+    "use_instead": "the tag `ignored:comp_intel_target` with `excluded_role:<role>`",
+    "retired": "2026-10-30"
+  },
+  {
+    "pattern": "\\bexcluded:[a-z_]+",
+    "use_instead": "the tag `ignored:comp_intel_target` with `excluded_role:<role>`",
+    "retired": "2026-10-30"
+  },
+  {
+    "pattern": "\\bmanual_removal\\b",
+    "use_instead": "`ignored_via=manual` plus a real category (`other:<why>` if nothing fits)",
+    "retired": "2026-10-30"
+  },
+  {
+    "pattern": "removed from monitoring",
+    "use_instead": "ignored",
+    "retired": "2026-10-30"
+  },
+  {
+    "pattern": "\\bkick_connection_send\\b",
+    "use_instead": "`kick_connection_worker` (the function that exists)",
+    "retired": "2026-10-17"
+  }
+]

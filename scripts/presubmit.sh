@@ -221,6 +221,27 @@ if [ -x scripts/presubmit_layer3.py ] || [ -f scripts/presubmit_layer3.py ]; the
   unset _diff _base
 fi
 
+# --- Layer 4: glossary, one name per thing ---
+#
+# Layers 1-3 keep things OUT of a public repo. This one keeps the words IN
+# agreement: the same decision was once "ignored" in Comp Intel and "removed
+# from monitoring" in MarketBase, and the two could not be told apart. The
+# canonical glossary is ~/.claude/GLOSSARY.md (not here - it names clients
+# elsewhere); scripts/glossary-retired.json is its export, and
+# scripts/check_glossary.py fails any line this change ADDS that uses a retired
+# term. Existing lines stand; a line that must name an old term carries the
+# token glossary-ok. Where the canonical file exists the export is also checked
+# for staleness; in CI it is used as-is.
+if [ -f scripts/check_glossary.py ]; then
+  if [ "${1:-}" = "--staged" ]; then _gmode="--staged"; else _gmode="--repo"; fi
+  if ! python3 scripts/check_glossary.py --self-test >/dev/null \
+     || ! python3 scripts/check_glossary.py --check-export scripts/glossary-retired.json \
+     || ! python3 scripts/check_glossary.py "$_gmode"; then
+    FAIL=1
+  fi
+  unset _gmode
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   echo "Pre-submit scan FAILED. Fix the above, or override with: git commit --no-verify"
   exit 1
