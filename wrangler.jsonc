@@ -3,10 +3,12 @@
   // Config lives here rather than in dashboard settings so the deploy is
   // reproducible, reviewable, and portable.
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "marketbase",
+  "name": "marketbase-site",
   "compatibility_date": "2026-08-31",
   "assets": {
     "directory": "./docs",
     "not_found_handling": "404-page"
-  }
+  },
+  // Required by `wrangler preview`, which Workers Builds runs for non-main branches.
+  "previews": {}
 }
