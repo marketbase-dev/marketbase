@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, normalize_linkedin_url
+from lib import connect, normalize_linkedin_url, lead_id_for_linkedin_url
 
 
 URL_COLUMNS = ("linkedin_url", "profile_url", "url", "linkedin", "LinkedIn URL")
@@ -190,13 +190,11 @@ def apply_tag(client: str, urls: list[str], tag: str, notes: str | None,
     with connect(client) as conn:
         with conn.cursor() as cur:
             for u in normed:
-                cur.execute("SELECT id FROM leads WHERE linkedin_url = %s", (u,))
-                row = cur.fetchone()
-                if not row:
+                lead_id = lead_id_for_linkedin_url(cur, u)
+                if lead_id is None:
                     counts["unknown_urls"] += 1
                     print(f"  ⚠ no lead found for {u}")
                     continue
-                lead_id = row[0]
                 counts["matched_leads"] += 1
                 if remove:
                     cur.execute("DELETE FROM lead_tags WHERE lead_id=%s AND tag=%s",

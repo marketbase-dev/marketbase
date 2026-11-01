@@ -139,6 +139,50 @@ def resolve_canonical_url(cur, linkedin_url: str | None, *,
     return linkedin_url
 
 
+def lead_id_for_linkedin_url(cur, linkedin_url: str | None):
+    """Resolve a (raw or normalized) LinkedIn URL to the id of the EXISTING lead
+    that represents this person, or None.
+
+    `lead_identities` is the identity authority: a lead keyed on its `AC…` URN
+    form in `leads.linkedin_url` still carries its vanity URL there, so a tool
+    that only reads `leads.linkedin_url` misses it (hit by tag_lead on a
+    URN-keyed lead, 2026-11-01). Match order: identity row by vanity URL -> identity
+    row by member-URN token -> legacy `leads.linkedin_url` -> `leads.member_urn`
+    -> `leads.public_id` slug. Pure cur reads, no writes."""
+    url = normalize_linkedin_url(linkedin_url)
+    if not url:
+        return None
+    cur.execute("SELECT lead_id FROM lead_identities WHERE kind='linkedin_url' AND value=%s LIMIT 1",
+                (url,))
+    row = cur.fetchone()
+    if row:
+        return row[0]
+    token = member_urn_token(url)
+    if token:
+        cur.execute("SELECT lead_id FROM lead_identities WHERE kind='linkedin_urn' AND value=%s LIMIT 1",
+                    (token,))
+        row = cur.fetchone()
+        if row:
+            return row[0]
+    cur.execute("SELECT id FROM leads WHERE linkedin_url=%s LIMIT 1", (url,))
+    row = cur.fetchone()
+    if row:
+        return row[0]
+    if token:
+        cur.execute("SELECT id FROM leads WHERE member_urn=%s LIMIT 1", (token,))
+        row = cur.fetchone()
+        if row:
+            return row[0]
+    m = _URN_RE.search(url)
+    slug = m.group(1) if m else None
+    if slug and not slug.startswith("AC"):
+        cur.execute("SELECT id FROM leads WHERE public_id=%s LIMIT 1", (slug,))
+        row = cur.fetchone()
+        if row:
+            return row[0]
+    return None
+
+
 def env_path(client: str) -> Path:
     """~/.env.<ClientName> — per-client secrets file."""
     return Path.home() / f".env.{client}"
