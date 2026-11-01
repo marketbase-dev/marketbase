@@ -43,7 +43,8 @@ import yaml
 from psycopg.types.json import Jsonb
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, normalize_linkedin_url, register_processor_from_yaml
+from lib import (connect, normalize_linkedin_url, register_processor_from_yaml,
+                 lead_id_for_linkedin_url, lead_ids_for_linkedin_urls)
 
 
 URL_COLUMNS = ("linkedin_url", "profile_url", "url", "linkedin", "LinkedIn URL")
@@ -315,18 +316,20 @@ def load_qualifier_spec(cur, name: str, version):
 def resolve_targets(cur, *, lead_url, lead_file, where_tag,
                     all_tagged_for_this_process):
     if lead_url:
-        u = normalize_linkedin_url(lead_url)
-        cur.execute("SELECT id, name, linkedin_url FROM leads WHERE linkedin_url = %s", (u,))
+        lead_id = lead_id_for_linkedin_url(cur, lead_url)
+        if lead_id is None:
+            return []
+        cur.execute("SELECT id, name, linkedin_url FROM leads WHERE id = %s", (lead_id,))
         return cur.fetchall()
     if lead_file:
         urls = [normalize_linkedin_url(u) for u in read_urls_from_file(Path(lead_file))]
         urls = [u for u in urls if u]
         if not urls:
             return []
-        cur.execute("""
-            SELECT id, name, linkedin_url FROM leads
-            WHERE linkedin_url = ANY(%s)
-        """, (urls,))
+        ids = list(lead_ids_for_linkedin_urls(cur, urls).values())
+        if not ids:
+            return []
+        cur.execute("SELECT id, name, linkedin_url FROM leads WHERE id = ANY(%s)", (ids,))
         return cur.fetchall()
     if where_tag:
         cur.execute("""

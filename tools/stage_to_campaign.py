@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, normalize_linkedin_url
+from lib import connect, normalize_linkedin_url, lead_ids_for_linkedin_urls
 
 
 VALID_STATUSES = ("staged","uploaded","connection_requested","connection_accepted",
@@ -200,10 +200,7 @@ def main():
                 urls = [u for u in urls if u]
                 if not urls:
                     sys.exit("No URLs read from file.")
-                cur.execute(
-                    "SELECT id FROM leads WHERE linkedin_url = ANY(%s)",
-                    (urls,))
-                lead_ids = [r[0] for r in cur.fetchall()]
+                lead_ids = list(dict.fromkeys(lead_ids_for_linkedin_urls(cur, urls).values()))
                 missing = len(urls) - len(lead_ids)
                 if missing:
                     print(f"  ⚠ {missing} URLs in file not found in leads table "

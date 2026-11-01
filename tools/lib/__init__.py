@@ -183,6 +183,21 @@ def lead_id_for_linkedin_url(cur, linkedin_url: str | None):
     return None
 
 
+def lead_ids_for_linkedin_urls(cur, urls):
+    """Resolve many LinkedIn URLs through lead_id_for_linkedin_url. Returns
+    {input url: lead id} for the ones that resolve, keyed by the string the
+    caller passed, so a caller can look its own rows back up. Misses are
+    simply absent."""
+    out = {}
+    for u in urls:
+        if not u or u in out:
+            continue
+        lid = lead_id_for_linkedin_url(cur, u)
+        if lid is not None:
+            out[u] = lid
+    return out
+
+
 def env_path(client: str) -> Path:
     """~/.env.<ClientName> — per-client secrets file."""
     return Path.home() / f".env.{client}"

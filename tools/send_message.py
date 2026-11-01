@@ -39,7 +39,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, normalize_linkedin_url
+from lib import connect, normalize_linkedin_url, lead_id_for_linkedin_url
 
 
 def unipile_base_and_token() -> tuple[str, str]:
@@ -59,11 +59,11 @@ def resolve_chat(conn, lead_url: str, operator: str | None, channel: str):
     Errors clearly when the lead has zero or ambiguous conversations."""
     normed = normalize_linkedin_url(lead_url)
     with conn.cursor() as cur:
-        cur.execute("SELECT id, name FROM leads WHERE linkedin_url = %s", (normed,))
-        row = cur.fetchone()
-        if not row:
+        lead_id = lead_id_for_linkedin_url(cur, normed)
+        if lead_id is None:
             sys.exit(f"no lead in MarketBase for {normed}")
-        lead_id, lead_name = row
+        cur.execute("SELECT name FROM leads WHERE id = %s", (lead_id,))
+        lead_name = cur.fetchone()[0]
 
         q = """
             SELECT o.display_name, o.unipile_account_id, lc.provider_chat_id

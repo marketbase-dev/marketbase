@@ -38,7 +38,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, normalize_linkedin_url  # noqa: E402
+from lib import connect, normalize_linkedin_url, lead_id_for_linkedin_url  # noqa: E402
 import api_cache  # noqa: E402
 
 TOOL = "ingest_luma_guests.py"
@@ -148,17 +148,9 @@ def find_lead(cur, email: str | None, li_url: str | None):
         if row:
             return row[0]
     if li_url:
-        cur.execute(
-            "SELECT lead_id FROM lead_identities WHERE kind='linkedin_url' AND value=%s",
-            (li_url,),
-        )
-        row = cur.fetchone()
-        if row:
-            return row[0]
-        cur.execute("SELECT id FROM leads WHERE linkedin_url=%s", (li_url,))
-        row = cur.fetchone()
-        if row:
-            return row[0]
+        lead_id = lead_id_for_linkedin_url(cur, li_url)
+        if lead_id is not None:
+            return lead_id
     return None
 
 

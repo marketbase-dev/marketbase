@@ -46,7 +46,7 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import connect, normalize_linkedin_url  # noqa: E402
+from lib import connect, normalize_linkedin_url, lead_ids_for_linkedin_urls  # noqa: E402
 
 from psycopg.types.json import Jsonb  # noqa: E402
 
@@ -129,8 +129,7 @@ def main() -> int:
     with connect(args.client) as conn:
         with conn.cursor() as cur:
             urls = [normalize_linkedin_url(d.get("URL") or "") for d in rows]
-            cur.execute("SELECT linkedin_url, id FROM leads WHERE linkedin_url = ANY(%s)", (urls,))
-            ids = dict(cur.fetchall())
+            ids = lead_ids_for_linkedin_urls(cur, urls)
             cur.execute("""SELECT full_result->>'_row_id' FROM lead_qualifications
                            WHERE qualifier_name = %s""", (qualifier,))
             done = {r[0] for r in cur.fetchall() if r[0]}
