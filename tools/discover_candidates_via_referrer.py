@@ -49,7 +49,7 @@ import urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, normalize_linkedin_url
+from lib import connect, normalize_linkedin_url, lead_id_for_linkedin_url
 
 
 # Apollo API — keys rotated on 429 / exhausted credit messages
@@ -205,14 +205,11 @@ def main() -> int:
     with connect(args.client) as conn:
         with conn.cursor() as cur:
             # 1. Look up referrer + their company
-            cur.execute("""
-                SELECT name, current_company
-                FROM leads WHERE linkedin_url = %s
-            """, (normalize_linkedin_url(args.referrer_url),))
-            row = cur.fetchone()
-            if not row:
+            referrer_id = lead_id_for_linkedin_url(cur, args.referrer_url)
+            if referrer_id is None:
                 sys.exit(f"Referrer not found in MarketBase: {args.referrer_url}")
-            referrer_name, referrer_company = row
+            cur.execute("SELECT name, current_company FROM leads WHERE id = %s", (referrer_id,))
+            referrer_name, referrer_company = cur.fetchone()
             if not referrer_company:
                 sys.exit(f"Referrer {referrer_name!r} has no current_company; "
                          f"pass --org-aliases explicitly.")

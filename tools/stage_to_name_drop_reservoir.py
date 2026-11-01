@@ -44,7 +44,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, normalize_linkedin_url
+from lib import connect, normalize_linkedin_url, lead_id_for_linkedin_url
 from stage_to_campaign import ensure_campaign, validate_campaign_name
 
 
@@ -113,11 +113,12 @@ def main() -> int:
     with connect(args.client) as conn:
         with conn.cursor() as cur:
             # 1. Look up referrer
-            cur.execute("""
-                SELECT id, name, current_company
-                FROM leads WHERE linkedin_url = %s
-            """, (normalize_linkedin_url(args.referrer_url),))
-            ref = cur.fetchone()
+            ref_lookup = lead_id_for_linkedin_url(cur, args.referrer_url)
+            ref = None
+            if ref_lookup is not None:
+                cur.execute("SELECT id, name, current_company FROM leads WHERE id = %s",
+                            (ref_lookup,))
+                ref = cur.fetchone()
             if not ref:
                 sys.exit(f"Referrer not found in MarketBase: {args.referrer_url}\n"
                          f"  Ingest the referrer first.")
@@ -158,9 +159,11 @@ def main() -> int:
             # 4. Look up each candidate's lead_id + name (must exist in MarketBase)
             missing = []
             for c in candidates:
-                cur.execute("SELECT id, name FROM leads WHERE linkedin_url=%s",
-                            (c["url"],))
-                row = cur.fetchone()
+                cand_id = lead_id_for_linkedin_url(cur, c["url"])
+                row = None
+                if cand_id is not None:
+                    cur.execute("SELECT id, name FROM leads WHERE id=%s", (cand_id,))
+                    row = cur.fetchone()
                 if not row:
                     missing.append(c["url"])
                     continue

@@ -24,7 +24,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, normalize_linkedin_url  # noqa: E402
+from lib import connect, normalize_linkedin_url, lead_id_for_linkedin_url  # noqa: E402
 
 VALID_STATUS = ("scheduled", "held", "cancelled", "no_show", "rescheduled")
 
@@ -70,11 +70,11 @@ def main() -> None:
     url = normalize_linkedin_url(args.lead_url)
     with connect(args.client) as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, name FROM leads WHERE linkedin_url = %s", (url,))
-            row = cur.fetchone()
-            if not row:
+            lead_id = lead_id_for_linkedin_url(cur, url)
+            if lead_id is None:
                 sys.exit(f"lead not found in MarketBase: {url}  (ingest it first with marketbase-upload-leads)")
-            lead_id, name = row
+            cur.execute("SELECT name FROM leads WHERE id = %s", (lead_id,))
+            name = cur.fetchone()[0]
 
             if args.mark_reminder:
                 entry = {"kind": args.mark_reminder,
