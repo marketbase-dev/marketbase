@@ -87,3 +87,9 @@ names it exists to protect.
 
 The same scan runs in CI on every push and pull request, alongside gitleaks over
 the full history.
+
+CI also applies every migration to a fresh Postgres, twice, and then checks that
+the schema *behaves*: `scripts/check_identity_trigger.py` exercises the
+`lead_identities` sync trigger (insert, handle change, duplicate, no-op update)
+inside one transaction that is always rolled back. Run it yourself against any
+database with `MARKETBASE_URL` set, or `--url`; nothing it writes survives.

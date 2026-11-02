@@ -128,3 +128,11 @@ jobs:
           python3 tools/apply_schema.py | tee /tmp/second.log
           grep -q "MARKETBASE_APPLIED=0" /tmp/second.log \
             || { echo "Second run applied migrations again; tracking is broken."; exit 1; }
+
+      # The schema applied; now does it BEHAVE? The lead_identities sync
+      # trigger (070) is SQL, invisible to every Python check above. Every
+      # write here happens inside one transaction that is rolled back.
+      - name: Identity trigger behaves (070)
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          python3 scripts/check_identity_trigger.py
