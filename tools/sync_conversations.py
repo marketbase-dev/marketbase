@@ -44,7 +44,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import (
-    connect, load_client_env, normalize_linkedin_url, linkedin_urn,
+    connect, load_client_env, normalize_linkedin_url, linkedin_handle,
     lead_id_for_linkedin_url,
 )
 
@@ -282,7 +282,7 @@ def sync_lead(conn, unipile_by_account: dict, operators: list[dict],
                "campaign_status_bumps": 0, "skipped": None}
 
     normed = normalize_linkedin_url(lead_url)
-    extracted = linkedin_urn(normed)
+    extracted = linkedin_handle(normed)
 
     with conn.cursor() as cur:
         lead_id = lead_id_for_linkedin_url(cur, normed)

@@ -55,7 +55,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import (connect, load_client_env, normalize_linkedin_url,  # noqa: E402
-                 linkedin_urn, resolve_canonical_url)
+                 member_urn_token, resolve_canonical_url)
 # Reuse the LeadMagic domain resolver rather than re-implementing it.
 from research_competitor import leadmagic_company_by_domain  # noqa: E402
 
@@ -766,7 +766,7 @@ def main() -> int:
                             city                = COALESCE(NULLIF(leads.city,''),                EXCLUDED.city),
                             country             = COALESCE(NULLIF(leads.country,''),             EXCLUDED.country),
                             updated_at          = NOW()
-                    """, [(k["url"], linkedin_urn(k["url"]), k["name"],
+                    """, [(k["url"], member_urn_token(k["url"]), k["name"],
                            (k["blitz"].get("headline") or "").replace("\n", " "),
                            k["title"], k["company"], curl,
                            (k["blitz"].get("location") or {}).get("city") or "",
