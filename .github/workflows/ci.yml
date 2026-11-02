@@ -110,6 +110,9 @@ jobs:
         run: |
           for f in tools/*.py tools/lib/*.py; do python3 -m py_compile "$f"; done
 
+      - name: Identity helpers keep their meaning
+        run: python3 scripts/check_identity_helpers.py --self-test
+
       - name: Install psycopg
         run: pip install --quiet "psycopg[binary]"
 

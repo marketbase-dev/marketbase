@@ -35,7 +35,7 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import connect, normalize_linkedin_url, linkedin_urn, resolve_canonical_url  # noqa: E402
+from lib import connect, normalize_linkedin_url, member_urn_token, resolve_canonical_url  # noqa: E402
 
 from psycopg.types.json import Jsonb  # noqa: E402
 
@@ -135,7 +135,7 @@ def main() -> int:
                         current_company = COALESCE(NULLIF(leads.current_company, ''), EXCLUDED.current_company),
                         updated_at      = NOW()
                     RETURNING id, (xmax = 0) AS inserted
-                """, (url, linkedin_urn(url), (row.get("Person Name") or "").strip(),
+                """, (url, member_urn_token(url), (row.get("Person Name") or "").strip(),
                       headline, title_from_headline(headline), company_from_row(row)))
                 lead_id, inserted = cur.fetchone()
                 stats["leads_new" if inserted else "leads_updated"] += 1

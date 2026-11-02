@@ -88,7 +88,14 @@ def normalize_linkedin_url(u: str | None) -> str:
 
 
 _URN_RE = re.compile(r"/in/([A-Za-z0-9_\-]+)")
-def linkedin_urn(u: str | None) -> str:
+def linkedin_handle(u: str | None) -> str:
+    """The `/in/<handle>` tail of a LinkedIn profile URL: the vanity slug, or the
+    `AC…` token when the URL is in URN form. A handle, not an identity.
+
+    This was `linkedin_urn()` until 2026-11-02, and under that name eight tools
+    wrote the vanity slug into `leads.linkedin_urn` (42,208 non-URN values across
+    the instances). For the member URN use `member_urn_token()`.
+    scripts/check_identity_helpers.py pins both meanings."""
     if not u: return ""
     m = _URN_RE.search(u)
     return (m.group(1) if m else "")
@@ -116,27 +123,37 @@ def resolve_canonical_url(cur, linkedin_url: str | None, *,
     `ON CONFLICT (linkedin_url)` updates the canonical row instead of creating a
     duplicate (or violating the uq_leads_member_urn identity index).
 
-    Match order: stable member URN (from the url or the urn hint) → vanity slug
-    against a stored public_id. Returns the input url unchanged when nothing
-    matches (genuinely new person). Pure cur reads — no writes."""
+    `lead_identities` is the identity authority, so it is consulted first (via
+    `lead_id_for_linkedin_url`: identity by vanity URL, identity by member-URN
+    token, then the legacy `leads` columns), then the urn hint's token against
+    the authority and against `leads.member_urn`. Returns the input url unchanged
+    when nothing matches (genuinely new person). Pure cur reads — no writes.
+
+    Routing through the authority is what keeps a creator from inserting a second
+    row for a person whose vanity URL or URN is already registered; the
+    `trg_leads_sync_identities` trigger (070) tags whatever still slips through."""
     if not linkedin_url:
         return linkedin_url
-    token = member_urn_token(linkedin_url, urn_hint)
-    if token:
-        cur.execute("SELECT linkedin_url FROM leads WHERE member_urn = %s LIMIT 1",
-                    (token,))
-        row = cur.fetchone()
-        if row:
-            return row[0]
-    m = _URN_RE.search(linkedin_url)
-    slug = m.group(1) if m else None
-    if slug and not slug.startswith("AC"):
-        cur.execute("SELECT linkedin_url FROM leads WHERE public_id = %s LIMIT 1",
-                    (slug,))
-        row = cur.fetchone()
-        if row:
-            return row[0]
-    return linkedin_url
+    lead_id = lead_id_for_linkedin_url(cur, linkedin_url)
+    if lead_id is None:
+        token = member_urn_token(urn_hint)
+        if token:
+            cur.execute("SELECT lead_id FROM lead_identities "
+                        "WHERE kind IN ('linkedin_urn','linkedin_urn_search') AND value = %s LIMIT 1",
+                        (token,))
+            row = cur.fetchone()
+            if row:
+                lead_id = row[0]
+            else:
+                cur.execute("SELECT id FROM leads WHERE member_urn = %s LIMIT 1", (token,))
+                row = cur.fetchone()
+                if row:
+                    lead_id = row[0]
+    if lead_id is None:
+        return linkedin_url
+    cur.execute("SELECT linkedin_url FROM leads WHERE id = %s", (lead_id,))
+    row = cur.fetchone()
+    return row[0] if row and row[0] else linkedin_url
 
 
 def lead_id_for_linkedin_url(cur, linkedin_url: str | None):
@@ -159,7 +176,8 @@ def lead_id_for_linkedin_url(cur, linkedin_url: str | None):
         return row[0]
     token = member_urn_token(url)
     if token:
-        cur.execute("SELECT lead_id FROM lead_identities WHERE kind='linkedin_urn' AND value=%s LIMIT 1",
+        cur.execute("SELECT lead_id FROM lead_identities "
+                    "WHERE kind IN ('linkedin_urn','linkedin_urn_search') AND value=%s LIMIT 1",
                     (token,))
         row = cur.fetchone()
         if row:

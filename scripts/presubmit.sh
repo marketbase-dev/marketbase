@@ -242,6 +242,16 @@ if [ -f scripts/check_glossary.py ]; then
   unset _gmode
 fi
 
+# The identity helpers keep their meaning: linkedin_handle() must never regain
+# what the retired linkedin_urn() did, which was to hand a vanity slug to eight
+# tools that wrote it into a URN column (42,208 rows). One self-test, no network.
+if [ -f scripts/check_identity_helpers.py ]; then
+  if ! python3 scripts/check_identity_helpers.py --self-test >/dev/null; then
+    echo "scripts/check_identity_helpers.py --self-test FAILED"
+    FAIL=1
+  fi
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   echo "Pre-submit scan FAILED. Fix the above, or override with: git commit --no-verify"
   exit 1

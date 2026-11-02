@@ -21,7 +21,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, normalize_linkedin_url, linkedin_urn, resolve_canonical_url
+from lib import connect, normalize_linkedin_url, linkedin_handle, member_urn_token, resolve_canonical_url
 
 
 VALID_SOURCE_TYPES = {
@@ -160,7 +160,7 @@ def main():
                 # Resolve to the canonical person row (by member URN / vanity
                 # slug) so a vanity-vs-URN URL difference updates the existing
                 # lead instead of creating a duplicate.
-                url = resolve_canonical_url(cur, url, urn_hint=linkedin_urn(url))
+                url = resolve_canonical_url(cur, url, urn_hint=linkedin_handle(url))  # a handle, not a URN: resolve_canonical_url keeps only an AC token out of it
                 if url in seen_urls:
                     # de-dup within file
                     pass
@@ -172,7 +172,7 @@ def main():
                                                    row.get(ln_col) if ln_col else None]))
                 identity = {
                     "linkedin_url":        url,
-                    "linkedin_urn":        linkedin_urn(url),
+                    "linkedin_urn":        member_urn_token(url),
                     "name":                (full_name or "").strip() or None,
                     "headline":            (row.get(hl_col) or "").strip() or None,
                     "current_title":       (row.get(title_col) or "").strip() or None,

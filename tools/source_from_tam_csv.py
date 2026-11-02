@@ -34,7 +34,7 @@ import psycopg2
 from psycopg2.extras import Json
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import normalize_linkedin_url, linkedin_urn, resolve_canonical_url
+from lib import normalize_linkedin_url, linkedin_handle, member_urn_token, resolve_canonical_url
 
 SALELEADS = os.path.expanduser("~/.claude/tools/saleleads/saleleads_cli.py")
 
@@ -417,7 +417,7 @@ def main():
             return None
         title = person.get("title", "") or ""
         loc = person.get("location", "") or ""
-        url = resolve_canonical_url(c, url, urn_hint=linkedin_urn(url))
+        url = resolve_canonical_url(c, url, urn_hint=linkedin_handle(url))  # a handle, not a URN: resolve_canonical_url keeps only an AC token out of it
         c.execute("""
             INSERT INTO leads (linkedin_url, linkedin_urn, name, headline, current_title,
                                current_company, current_company_url, city)
@@ -432,7 +432,7 @@ def main():
                 linkedin_urn=COALESCE(leads.linkedin_urn,EXCLUDED.linkedin_urn),
                 updated_at=now()
             RETURNING id, (xmax = 0) AS inserted
-        """, (url, linkedin_urn(url), person.get("name") or None, title or None, title or None,
+        """, (url, member_urn_token(url), person.get("name") or None, title or None, title or None,
               company_name, company_url, loc or None))
         lead_id, inserted = c.fetchone()
         c.execute("""INSERT INTO lead_sources (lead_id, source_type, source_label, source_date, raw_data)
@@ -524,7 +524,7 @@ def main():
                 if not url:
                     continue
                 c = db()
-                url = resolve_canonical_url(c, url, urn_hint=linkedin_urn(url))
+                url = resolve_canonical_url(c, url, urn_hint=linkedin_handle(url))  # a handle, not a URN: resolve_canonical_url keeps only an AC token out of it
                 c.execute("""
                     INSERT INTO leads (linkedin_url, linkedin_urn, name, headline,
                                        current_title, current_company, current_company_url, city)
@@ -539,7 +539,7 @@ def main():
                         linkedin_urn    = COALESCE(leads.linkedin_urn,    EXCLUDED.linkedin_urn),
                         updated_at      = now()
                     RETURNING id, (xmax = 0) AS inserted
-                """, (url, linkedin_urn(url), person.get("name") or None, title or None,
+                """, (url, member_urn_token(url), person.get("name") or None, title or None,
                       title or None, p["name"], f"https://www.linkedin.com/company/{p['slug']}/",
                       loc or None))
                 lead_id, inserted = c.fetchone()
