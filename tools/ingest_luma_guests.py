@@ -196,6 +196,7 @@ def main():
                     break
 
             created = matched = sources_added = sources_skipped = tags_added = 0
+            duplicates = 0
             by_status: dict[str, int] = {}
 
             for g in guests:
@@ -240,25 +241,27 @@ def main():
                         raise RuntimeError(f"expected 1 row updating lead {lead_id}, "
                                            f"got {cur.rowcount}")
 
+                # Through lead_identity_claim (070/071), the one write path into
+                # lead_identities. Non-primary: a guest's e-mail or handle is an
+                # alias that never demotes what the lead row carries. A value
+                # already owned by ANOTHER lead stays with its owner and THIS
+                # lead is tagged flag:duplicate_lead + expansion:do_not_push
+                # with a note naming the owner: a declined write is a recorded
+                # finding, never a silent no-op.
                 identity_src = f"luma:{args.event_id}"
-                if email:
+                for kind, value in (("email", email), ("linkedin_url", li_url)):
+                    if not value:
+                        continue
                     cur.execute(
-                        """
-                        INSERT INTO lead_identities (lead_id, kind, value, source)
-                        VALUES (%s, 'email', %s, %s)
-                        ON CONFLICT (kind, value) DO NOTHING
-                        """,
-                        (lead_id, email, identity_src),
+                        "SELECT lead_identity_claim(%s, %s, %s, %s, false)",
+                        (lead_id, kind, value, identity_src),
                     )
-                if li_url:
-                    cur.execute(
-                        """
-                        INSERT INTO lead_identities (lead_id, kind, value, source)
-                        VALUES (%s, 'linkedin_url', %s, %s)
-                        ON CONFLICT (kind, value) DO NOTHING
-                        """,
-                        (lead_id, li_url, identity_src),
-                    )
+                    outcome = cur.fetchone()[0]
+                    if outcome.startswith("duplicate:"):
+                        duplicates += 1
+                        print(f"  !! {kind} {value} already belongs to lead "
+                              f"{outcome.split(':', 1)[1]}; lead {lead_id} tagged "
+                              f"flag:duplicate_lead (same person twice)")
 
                 # Append a provenance row only when this guest's status changed
                 # since the last recorded row for this event.
@@ -304,6 +307,9 @@ def main():
         conn.commit()
         print(f"\n{len(guests)} guests across {pages} page(s)")
         print(f"  leads created: {created}, matched existing: {matched}")
+        if duplicates:
+            print(f"  identities owned by another lead: {duplicates} "
+                  f"(tagged flag:duplicate_lead; same person twice, never merged)")
         print(f"  lead_sources rows added: {sources_added} "
               f"(unchanged, skipped: {sources_skipped})")
         print(f"  tags applied: {tags_added} ({args.tag})")
