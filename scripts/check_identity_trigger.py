@@ -173,6 +173,48 @@ def run(conn) -> tuple[int, list[str]]:
     ib2 = idents(b)
     check("H: a pre-existing own row is promoted to primary, no duplicate row",
           [(k, p) for k, v, p, *_ in ib2 if k == "linkedin_url"] == [("linkedin_url", True)], ib2)
+
+    # I: the claim function as the TOOLS call it (071): an alias is recorded
+    # non-primary without demoting, a verification fills a NULL verified_at and
+    # never overwrites one, and a value owned elsewhere returns the owner.
+    def claim(lid, kind, value, primary, verified_at):
+        cur.execute("SELECT lead_identity_claim(%s, %s, %s, 'check_identity_trigger', %s, %s)",
+                    (lid, kind, value, primary, verified_at))
+        return cur.fetchone()[0]
+
+    alias = IN + "zz-test-vanity-f-alias"
+    check("I: an alias claim is inserted", claim(f, "linkedin_url", alias, False, None) == "inserted")
+    i_f2 = {v: (p, ver) for k, v, p, s, ver in idents(f) if k == "linkedin_url"}
+    check("I: the alias is non-primary and the row's own URL stays primary",
+          i_f2.get(alias) == (False, None) and i_f2.get(IN + "zz-test-vanity-f", (None,))[0] is True, i_f2)
+    check("I: claiming it again is 'ours' and adds nothing",
+          claim(f, "linkedin_url", alias, False, None) == "ours" and len(idents(f)) == len(i_f2) + 1)
+    cur.execute("SELECT now() - interval '1 day'")
+    t1 = cur.fetchone()[0]
+    claim(f, "linkedin_url", alias, False, t1)
+    cur.execute("SELECT verified_at FROM lead_identities WHERE lead_id=%s AND kind='linkedin_url' AND value=%s",
+                (f, alias))
+    check("I: a verification fills a NULL verified_at", cur.fetchone()[0] == t1)
+    cur.execute("SELECT now()")
+    t2 = cur.fetchone()[0]
+    claim(f, "linkedin_url", alias, False, t2)
+    cur.execute("SELECT verified_at FROM lead_identities WHERE lead_id=%s AND kind='linkedin_url' AND value=%s",
+                (f, alias))
+    check("I: a later verification never overwrites an earlier one", cur.fetchone()[0] == t1)
+    check("I: an empty value is 'empty'", claim(f, "linkedin_url", "", False, None) == "empty")
+
+    cur.execute("SELECT lead_id, is_primary, source, verified_at FROM lead_identities "
+                "WHERE kind='linkedin_urn' AND value=%s", (URN_B,))
+    owner_row_before = cur.fetchone()
+    out = claim(f, "linkedin_urn", URN_B, False, t2)
+    check("I: a value owned elsewhere returns the owner", out == f"duplicate:{b}", out)
+    cur.execute("SELECT lead_id, is_primary, source, verified_at FROM lead_identities "
+                "WHERE kind='linkedin_urn' AND value=%s", (URN_B,))
+    check("I: the owner's row is untouched, not even its verified_at", cur.fetchone() == owner_row_before)
+    tf = tags(f)
+    check("I: the duplicate is recorded as the two tags, by the tool's name",
+          [t for t, *_ in tf] == ["expansion:do_not_push", "flag:duplicate_lead"]
+          and all(tb == "check_identity_trigger" and str(b) in n for _, n, tb in tf), tf)
     return total, fails
 
 
