@@ -136,3 +136,10 @@ jobs:
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_identity_trigger.py
+
+      # 072's rules are CHECK constraints and a trigger: prove the database
+      # refuses a decision with no decider and an observation with no evidence.
+      - name: Observation and decision rules behave (072)
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          python3 scripts/check_assertion_kinds.py
