@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Exercise the voice policy function rule (schema/077) against a database that
+"""Exercise the voice policy rule (schema/077 functions, 078 activity rule) against a database that
 already has every migration applied. Everything runs inside ONE transaction that
 is always rolled back: no row survives, on any instance.
 
 Why this exists: which functions' leaders we follow is a rule in the instance,
 checked by the database. This proves the house default was seeded once per
 rule-picked group, the withdrawn thresholds are gone, and a function outside the
-vocabulary or a negative traction cutoff is refused.
+vocabulary is refused, and the activity rule's JSON is held to its shape: known
+keys only, non-negative numbers, known always_include words.
 
 Usage:
   python3 scripts/check_voice_policy_functions.py                 # MARKETBASE_URL (CI)
@@ -82,7 +83,7 @@ def run(conn) -> tuple[int, list[str]]:
 
     DEFAULT = ["executive", "sales", "marketing", "product", "partnerships", "solutions",
                "customer_success", "strategy"]
-    cur.execute("SELECT voice_group, keep_functions, workspace_keep_functions, min_post_reactions "
+    cur.execute("SELECT voice_group, keep_functions, workspace_keep_functions, activity_rule "
                 "FROM voice_policy WHERE version = 'house-default@2026-11-04' ORDER BY voice_group")
     seeded = cur.fetchall()
     check("the house default is seeded for competitor and own, not industry",
@@ -92,22 +93,32 @@ def run(conn) -> tuple[int, list[str]]:
     cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'voice_policy' "
                 "AND column_name IN ('post_recency_days', 'min_target_reposts', 'min_finance_share')")
     check("the three withdrawn thresholds are gone", cur.fetchall() == [])
+    cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'voice_policy' "
+                "AND column_name = 'min_post_reactions'")
+    check("077's cutoff column moved into activity_rule (078)", cur.fetchall() == [])
 
     cur.execute("SELECT kind, entity_type FROM tag_definitions WHERE namespace = 'voice' AND key = 'leader_function'")
     check("voice/leader_function is registered as a decision about a lead",
           cur.fetchall() == [("decision", "lead")])
 
+    # Whatever is active (the house default on a fresh database, a workspace version on a live one).
     cur.execute("UPDATE voice_policy SET superseded_at = now() WHERE voice_group = 'competitor' "
-                "AND version = 'house-default@2026-11-04' AND superseded_at IS NULL")
-    check("superseding the competitor default is one row", cur.rowcount == 1, cur.rowcount)
+                "AND superseded_at IS NULL")
+    check("superseding the active competitor policy is one row", cur.rowcount == 1, cur.rowcount)
     pol = ("INSERT INTO voice_policy (voice_group, version, keep_functions, workspace_keep_functions, "
-           "min_post_reactions, source, rationale, created_by) "
-           "VALUES ('competitor', %s, %s, %s, %s, 'zz source', 'zz why', 'check_voice_policy_functions')")
+           "activity_rule, source, rationale, created_by) "
+           "VALUES ('competitor', %s, %s, %s, %s::jsonb, 'zz source', 'zz why', 'check_voice_policy_functions')")
+    RULE = ('{"own_posts_90d_min": 1, "own_posts_365d_min": 4, "median_own_reactions_min": 10, '
+            '"always_include": ["founder", "company_page", "own_asset"]}')
     refused("an unknown default function is refused", pol, ("zz-v1", DEFAULT + ["astrology"], None, None))
     refused("an unknown workspace function is refused", pol, ("zz-v1", DEFAULT, ["astrology"], None))
-    refused("a negative traction cutoff is refused", pol, ("zz-v1", DEFAULT, ["finance"], -1))
-    state, _ = attempt(pol, ("zz-v1", DEFAULT, ["finance"], 5))
-    check("a workspace version adding finance with a cutoff is accepted", state is None, state)
+    refused("an activity rule that is not an object is refused", pol, ("zz-v1", DEFAULT, None, "[10]"))
+    refused("a misspelled activity key is refused", pol, ("zz-v1", DEFAULT, None, '{"own_posts_90d_mn": 1}'))
+    refused("a negative activity threshold is refused", pol, ("zz-v1", DEFAULT, None, '{"own_posts_90d_min": -1}'))
+    refused("a threshold given as text is refused", pol, ("zz-v1", DEFAULT, None, '{"median_own_reactions_min": "10"}'))
+    refused("an unknown always_include word is refused", pol, ("zz-v1", DEFAULT, None, '{"always_include": ["ceo"]}'))
+    state, _ = attempt(pol, ("zz-v1", DEFAULT, ["finance"], RULE))
+    check("a workspace version adding finance with the full activity rule is accepted", state is None, state)
     state, _ = attempt(pol, ("zz-v2", DEFAULT, ["security_it"], None))
     check("a second active competitor policy still collides", state == UNIQUE, state)
 
