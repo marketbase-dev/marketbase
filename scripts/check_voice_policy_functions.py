@@ -93,6 +93,10 @@ def run(conn) -> tuple[int, list[str]]:
                 "AND column_name IN ('post_recency_days', 'min_target_reposts', 'min_finance_share')")
     check("the three withdrawn thresholds are gone", cur.fetchall() == [])
 
+    cur.execute("SELECT kind, entity_type FROM tag_definitions WHERE namespace = 'voice' AND key = 'leader_function'")
+    check("voice/leader_function is registered as a decision about a lead",
+          cur.fetchall() == [("decision", "lead")])
+
     cur.execute("UPDATE voice_policy SET superseded_at = now() WHERE voice_group = 'competitor' "
                 "AND version = 'house-default@2026-11-04' AND superseded_at IS NULL")
     check("superseding the competitor default is one row", cur.rowcount == 1, cur.rowcount)

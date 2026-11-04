@@ -71,6 +71,14 @@ COMMENT ON COLUMN voice_policy.workspace_keep_functions IS
 COMMENT ON COLUMN voice_policy.min_post_reactions IS
     'Median reactions per post a voice must show. NULL = traction not yet chosen; nobody is cut on it.';
 
+-- ── where a person's function is recorded ──────────────────────────────────
+INSERT INTO tag_definitions (namespace, key, entity_type, layer, kind, description) VALUES
+  ('voice', 'leader_function', 'lead', 'attribute', 'decision',
+   'The function of this person''s current role, as the voice title-review processor read their title '
+   'and headline. value = one word from the voice_policy function vocabulary; notes = the reason. '
+   'Kept as a voice only when the function is in the active policy''s keep lists.')
+ON CONFLICT (namespace, key, entity_type) DO NOTHING;
+
 -- ── the house default, seeded once per group that is chosen by rule ────────
 -- Industry voices are named by the client, not picked by a rule, so they get no row.
 INSERT INTO voice_policy (voice_group, version, title_keywords, keep_functions,
