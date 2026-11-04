@@ -124,7 +124,10 @@ def run(conn) -> tuple[int, list[str]]:
           n >= 1 and one("SELECT poster_lead_id FROM posts WHERE post_urn='zz-p7'")[0] == late, n)
 
     # ── voice_policy ──
-    pol = ("INSERT INTO voice_policy (voice_group, version, title_keywords, post_recency_days, "
+    # 077 seeds an active house-default row per rule-picked group; set them aside so this
+    # exercises the table itself (rolled back with everything else).
+    cur.execute("UPDATE voice_policy SET superseded_at = now() WHERE superseded_at IS NULL")
+    pol = ("INSERT INTO voice_policy (voice_group, version, title_keywords, min_rank, "
            "source, rationale, created_by) VALUES (%s, %s, %s, %s, 'zz source', 'zz why', 'check_voices')")
     state, _ = attempt(pol, ("competitor", "zz-v1", ["vp", "chief"], 90))
     check("a competitor policy is accepted", state is None, state)
