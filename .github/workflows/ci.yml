@@ -150,3 +150,10 @@ jobs:
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_voices.py
+
+      # 075: nothing deletes, foreign keys included. A new migration that
+      # declares ON DELETE CASCADE / SET NULL fails here.
+      - name: No foreign key cascades on delete (075)
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          python3 scripts/check_no_cascading_deletes.py
