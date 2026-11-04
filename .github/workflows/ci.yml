@@ -160,7 +160,8 @@ jobs:
 
       # 077: leaders are followed by function, from a house default plus what the
       # workspace adds; the withdrawn thresholds are gone and bad values are refused.
-      - name: Voice policy function rule behaves (077)
+      # 078: the activity rule is one jsonb value whose shape the database checks.
+      - name: Voice policy function and activity rules behave (077, 078)
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_voice_policy_functions.py
