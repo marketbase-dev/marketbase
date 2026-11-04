@@ -7,7 +7,7 @@ qualified, whether they are eligible for outreach, and why not when they are not
 
 The file is MULTI-CLIENT (one row per verdict across every Buyer-Monitor client),
 so rows are filtered on the embedded `Client` field. Clients also emit different
-schemas for the same idea, and both are normalised here:
+schemas for the same idea, and all of them are normalised here:
 
     Acme :  Person Qualification Status = Pass | Fail
                  Person Outreach Eligibility = Passed | Suppressed - <reason>
@@ -15,6 +15,18 @@ schemas for the same idea, and both are normalised here:
     <Client>  :  Person Qualification Status = true | false
                  Company Outreach Eligibility = true | false
                  (no Person Outreach Eligibility field at all)
+    Northwind :  Person Qualification Status = Accepted | DQ
+                 (its own words: pass them with --qualified-words / --failed-words)
+
+Status vocabulary. Clients spell "accepted" and "rejected" in their own words, so
+the caller should pass the client's vocabulary (--qualified-words accepted
+--failed-words dq) from wherever it is configured. With a vocabulary, a status word
+in neither list is reported as UNRECOGNISED and not filed: it is not a rejection,
+and treating an unknown word as one is how a client's acceptances once read as
+zero. Without a vocabulary, the legacy TRUE set below applies.
+
+A payload with no status at all carries no verdict and is counted `no_verdict`,
+never filed as a failed qualification.
 
 Writes to `lead_qualifications` under a per-client qualifier name, so the client's
 verdict is queryable next to our own qualifiers without pretending to be one, plus
@@ -32,12 +44,15 @@ accounts that are already in play.
 Usage:
   python3 import_qualification_outcomes.py --client Acme \
       --csv ".../webhook-outcome-logs-2026-08-12.csv" [--client-key Acme] [--dry-run]
+  python3 import_qualification_outcomes.py --client Northwind --csv - \
+      --qualified-words accepted --failed-words dq      # rows on stdin, never on disk
 """
 from __future__ import annotations
 
 import argparse
 import csv
 import hashlib
+import io
 import json
 import os
 import re
@@ -46,13 +61,14 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import connect, normalize_linkedin_url, lead_ids_for_linkedin_urls  # noqa: E402
+from lib import connect, member_urn_token, normalize_linkedin_url, lead_ids_for_linkedin_urls  # noqa: E402
 
 from psycopg.types.json import Jsonb  # noqa: E402
 
 csv.field_size_limit(10 ** 7)
 
 QUALIFIER_VERSION = "1.0"
+# Fallback vocabulary, used only when the caller passes none.
 TRUE = {"pass", "true", "yes", "eligible", "passed"}
 
 
@@ -64,14 +80,37 @@ def slug(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", (s or "").lower()).strip("_")
 
 
-def verdict(d: dict) -> tuple[bool, bool, str]:
-    """(person_qualified, outreach_ok, disqualified_reason) across both schemas."""
-    q = truthy(d.get("Person Qualification Status"))
+def words(arg: str) -> set[str]:
+    return {w.strip().lower() for w in (arg or "").split(",") if w.strip()}
+
+
+def status_reading(d: dict, qualified_words: set[str] | None,
+                   failed_words: set[str] | None) -> str:
+    """'qualified' | 'failed' | 'blank' | 'unrecognised' for the status field."""
+    s = str(d.get("Person Qualification Status") or "").strip().lower()
+    if not s:
+        return "blank"
+    if qualified_words is None:
+        return "qualified" if s in TRUE else "failed"
+    if s in qualified_words:
+        return "qualified"
+    if failed_words is not None and s in failed_words:
+        return "failed"
+    return "unrecognised"
+
+
+def verdict(d: dict, qualified_words: set[str] | None = None) -> tuple[bool, bool, str]:
+    """(person_qualified, outreach_ok, disqualified_reason) across the schemas."""
+    q = truthy(d.get("Person Qualification Status")) if qualified_words is None else (
+        str(d.get("Person Qualification Status") or "").strip().lower() in qualified_words)
     pe = d.get("Person Outreach Eligibility")
     ce = d.get("Company Outreach Eligibility")
+    # Eligibility may carry the client's own words too (some echo the status into it).
+    ok_words = TRUE | (qualified_words or set())
+    elig = lambda v: str(v).strip().lower() in ok_words  # noqa: E731
     # Person-level eligibility wins when present; otherwise fall back to company
     # level, which is all the true/false schema emits.
-    ok = truthy(pe) if pe is not None else truthy(ce)
+    ok = elig(pe) if pe is not None else elig(ce)
     if q and not ok:
         reason = str(pe or ce or "").strip() or "suppressed"
     elif not q:
@@ -84,10 +123,18 @@ def verdict(d: dict) -> tuple[bool, bool, str]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--client", required=True)
-    ap.add_argument("--csv", required=True)
+    ap.add_argument("--csv", required=True,
+                    help="path to the outcome CSV, or '-' to read it from stdin, so "
+                         "verdicts fetched from an API never have to touch disk")
     ap.add_argument("--client-key", default="", help="value of the embedded Client field "
                                                      "(defaults to --client)")
     ap.add_argument("--qualifier", default="", help="defaults to <client-key>_clay_outcome")
+    ap.add_argument("--qualified-words", default=None,
+                    help="comma list of status words meaning ACCEPTED for this client. "
+                         "With it, a status in neither list is reported as unrecognised, "
+                         "never filed as a rejection.")
+    ap.add_argument("--failed-words", default=None,
+                    help="comma list of status words meaning REJECTED (see --qualified-words)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--retag-only", action="store_true",
                     help="skip the qualification inserts, just recompute the outcome:* "
@@ -96,10 +143,19 @@ def main() -> int:
 
     client_key = args.client_key or args.client
     qualifier = args.qualifier or f"{slug(client_key)}_clay_outcome"
-    path = Path(args.csv)
+    qw = words(args.qualified_words) if args.qualified_words is not None else None
+    fw = words(args.failed_words) if args.failed_words is not None else None
+    unrecognised = Counter()
+
+    if args.csv == "-":
+        src_name = "stdin"
+        fh = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8-sig", newline="")
+    else:
+        src_name = Path(args.csv).name
+        fh = Path(args.csv).open(encoding="utf-8-sig", newline="")
 
     rows, skipped_client, unparseable = [], 0, 0
-    for r in csv.DictReader(path.open(encoding="utf-8-sig")):
+    for r in csv.DictReader(fh):
         try:
             d = json.loads(r["qualification_results"])
         except Exception:
@@ -117,7 +173,7 @@ def main() -> int:
         d["_created_at"] = r.get("createdAt")
         rows.append(d)
 
-    print(f"{path.name}: {len(rows)} rows for Client='{client_key}' "
+    print(f"{src_name}: {len(rows)} rows for Client='{client_key}' "
           f"({skipped_client} other clients, {unparseable} unparseable)")
     if not rows:
         return 0
@@ -130,6 +186,25 @@ def main() -> int:
         with conn.cursor() as cur:
             urls = [normalize_linkedin_url(d.get("URL") or "") for d in rows]
             ids = lead_ids_for_linkedin_urls(cur, urls)
+            # Fall back to the stable member URN for anything the URL string missed.
+            # A verdict can arrive keyed on a member-URN URL while the lead is stored
+            # under the other URN namespace or a vanity URL: one person, strings that
+            # match on nothing. `member_urn` is the identity, so it recovers them.
+            unmatched = {u for u in urls if u and u not in ids}
+            if unmatched:
+                recovered = 0
+                for u in unmatched:
+                    tok = member_urn_token(u)
+                    if not tok:
+                        continue
+                    cur.execute("SELECT id FROM leads WHERE member_urn = %s LIMIT 1", (tok,))
+                    row = cur.fetchone()
+                    if row:
+                        ids[u] = row[0]
+                        recovered += 1
+                if recovered:
+                    print(f"  recovered {recovered} lead(s) by member_urn that the "
+                          f"URL string missed")
             cur.execute("""SELECT full_result->>'_row_id' FROM lead_qualifications
                            WHERE qualifier_name = %s""", (qualifier,))
             done = {r[0] for r in cur.fetchall() if r[0]}
@@ -137,7 +212,17 @@ def main() -> int:
 
             pending_q, latest_tags = [], {}
             for d, url in zip(rows, urls):
-                q, ok, reason = verdict(d)
+                reading = status_reading(d, qw, fw)
+                if reading == "blank":
+                    # No status, no verdict: filing it as failed_qual would invent
+                    # a rejection nobody made.
+                    buckets["no_verdict"] += 1
+                    continue
+                if reading == "unrecognised":
+                    buckets["unrecognised_status"] += 1
+                    unrecognised[str(d.get("Person Qualification Status")).strip()] += 1
+                    continue
+                q, ok, reason = verdict(d, qw)
                 bucket = ("qualified_eligible" if (q and ok)
                           else "failed_qual" if not q else "suppressed")
                 buckets[bucket] += 1
@@ -166,6 +251,11 @@ def main() -> int:
             print("\noutcome buckets (all rows for this client):")
             for b, n in buckets.most_common():
                 print(f"    {n:>5}  {b}")
+            if unrecognised:
+                print("  status words the vocabulary does not know (NOT filed; add them "
+                      "to --qualified-words / --failed-words):")
+                for w, n in unrecognised.most_common():
+                    print(f"    {n:>5}  {w!r}")
 
             pending_t = [t for tags_ in latest_tags.values() for t in tags_]
             if not args.dry_run and (pending_q or (args.retag_only and pending_t)):
