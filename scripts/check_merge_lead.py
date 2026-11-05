@@ -290,6 +290,27 @@ def run(conn) -> tuple[int, list[str]]:
           raises("SELECT merge_lead(%s, %s, 'fixture')", (third, chosen)) is None
           and one("SELECT count(*) FROM lead_merge_queue WHERE value=%s", (urn3,)) == 0)
 
+    # ── a keeper keyed on its URN-form URL takes the dup's vanity URL (081) ───
+    urn4 = "ACoAA" + "MERGE" * 7 + "04"
+    cur.execute("INSERT INTO leads (linkedin_url, name) VALUES (%s, 'Merge Fixture urn-keyed') RETURNING id",
+                (IN + urn4,))
+    urn_keeper = cur.fetchone()[0]
+    cur.execute("SELECT lead_identity_claim(%s, 'linkedin_urn', %s, 'check_merge_lead')", (urn_keeper, urn4))
+    vanity_dup = lead("merge-fixture-vanity", urn4)
+    cur.execute("SELECT merge_lead(%s, %s, 'check_merge_lead')", (vanity_dup, urn_keeper))
+    m4 = cur.fetchone()[0]
+    m4 = m4 if isinstance(m4, dict) else json.loads(m4)
+    cur.execute("SELECT linkedin_url, public_id FROM leads WHERE id=%s", (urn_keeper,))
+    k4 = cur.fetchone()
+    check("a URN-form keeper takes the dup's vanity URL, and the old URL is in lead_merges.replaced",
+          k4 == (IN + "merge-fixture-vanity", "merge-fixture-vanity")
+          and m4["replaced"].get("linkedin_url") == IN + urn4, (k4, m4.get("replaced")))
+    check("the vanity URL is the keeper's primary identity",
+          one("SELECT count(*) FROM lead_identities WHERE lead_id=%s AND kind='linkedin_url' AND value=%s "
+              "AND is_primary", (urn_keeper, IN + "merge-fixture-vanity")) == 1)
+    check("a keeper with its own vanity URL keeps it",
+          one("SELECT linkedin_url FROM leads WHERE id=%s", (keeper,)) == IN + "merge-fixture-keeper")
+
     conn.rollback()
     return total, fails
 
