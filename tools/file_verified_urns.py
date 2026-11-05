@@ -17,7 +17,8 @@ Evidence, one stored response per finding, cited in the row's source:
     URL answered with the URN.
 Only leads with no linkedin_urn identity and no member_urn; only URNs owned
 by an unmerged lead; never a lead tied to two URNs. A pair whose names share
-no name is HELD and listed, never filed (vendor indexes misattribute).
+no name is HELD and listed, never filed (vendor indexes misattribute), unless
+the owner reviewed it by hand and names it with --approve-held <lead id>.
 
 Writes conflict rows only: no identity (the URN stays its owner's until the
 merge moves it), no tags (the finding is the row; a tag pair would mark a lead
@@ -28,6 +29,7 @@ DEFAULT IS A DRY RUN. --execute --expect N commits only if N rows are filed.
 Usage:
   python3 file_verified_urns.py --client X
   python3 file_verified_urns.py --client X --execute --expect N
+  python3 file_verified_urns.py --client X --approve-held <lead id> [...] [--execute --expect N]
 """
 from __future__ import annotations
 
@@ -96,6 +98,8 @@ def main() -> int:
     ap.add_argument("--client", required=True)
     ap.add_argument("--execute", action="store_true")
     ap.add_argument("--expect", type=int, help="with --execute: the approved number of rows to file")
+    ap.add_argument("--approve-held", action="append", default=[], metavar="LEAD_ID",
+                    help="a held lead the owner reviewed by hand: file it although the names differ")
     args = ap.parse_args()
     if args.execute and args.expect is None:
         sys.exit("--execute needs --expect N from the dry run")
@@ -113,11 +117,18 @@ def main() -> int:
     for lead, urn, owner, call, via, n_urns, lname, oname in rows:
         if n_urns != 1:
             held.append((lead, owner, lname, oname, "tied to more than one URN"))
-        elif not names_agree(lname, oname):
+        elif not names_agree(lname, oname) and lead not in args.approve_held:
             held.append((lead, owner, lname, oname, "names share nothing"))
+        elif not names_agree(lname, oname):
+            file.append((lead, urn, owner, f"file_verified_urns: {via} enrichment_calls {call}; "
+                                           f"names differ, reviewed and approved by the owner"))
         else:
             file.append((lead, urn, owner, f"file_verified_urns: {via} enrichment_calls {call}"))
 
+    unknown = set(args.approve_held) - {r[0] for r in rows}
+    if unknown:
+        conn.rollback()
+        sys.exit(f"--approve-held names lead(s) with no evidence-backed finding: {', '.join(sorted(unknown))}")
     print(f"{args.client}: {len(rows)} evidence-backed finding(s); {len(file)} to file, {len(held)} held")
     print("  by evidence: " + ", ".join(f"{k} {v}" for k, v in
                                        collections.Counter(s.split(": ")[1].rsplit(" enrichment_calls", 1)[0]
