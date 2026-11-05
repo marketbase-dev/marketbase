@@ -286,6 +286,12 @@ def run(conn) -> tuple[int, list[str]]:
                   (third, owner)) == 1)
     check("the keeper owns the URN identity now",
           one("SELECT lead_id FROM lead_identities WHERE kind='linkedin_urn' AND value=%s", (urn3,)) == chosen)
+    check("the keeper's own flags naming the merged owner are retired, each audited (083)",
+          one("SELECT count(*) FROM lead_tags WHERE lead_id=%s AND tag IN "
+              "('flag:duplicate_lead','expansion:do_not_push')", (chosen,)) == 0
+          and one("SELECT count(*) FROM assertions WHERE subject_lead_id=%s AND namespace='lead_tag' "
+                  "AND removed_reason LIKE 'resolved by merge %%'", (chosen,)) == 2
+          and one("SELECT jsonb_array_length(retired) FROM lead_merges WHERE dup_id=%s", (owner,)) == 2)
     check("the third row then merges into the same keeper",
           raises("SELECT merge_lead(%s, %s, 'fixture')", (third, chosen)) is None
           and one("SELECT count(*) FROM lead_merge_queue WHERE value=%s", (urn3,)) == 0)
@@ -297,6 +303,8 @@ def run(conn) -> tuple[int, list[str]]:
     urn_keeper = cur.fetchone()[0]
     cur.execute("SELECT lead_identity_claim(%s, 'linkedin_urn', %s, 'check_merge_lead')", (urn_keeper, urn4))
     vanity_dup = lead("merge-fixture-vanity", urn4)
+    cur.execute("INSERT INTO lead_tags (lead_id, tag, notes) VALUES (%s, 'expansion:do_not_push', 'client request')",
+                (urn_keeper,))
     cur.execute("SELECT merge_lead(%s, %s, 'check_merge_lead')", (vanity_dup, urn_keeper))
     m4 = cur.fetchone()[0]
     m4 = m4 if isinstance(m4, dict) else json.loads(m4)
@@ -305,6 +313,9 @@ def run(conn) -> tuple[int, list[str]]:
     check("a URN-form keeper takes the dup's vanity URL, and the old URL is in lead_merges.replaced",
           k4 == (IN + "merge-fixture-vanity", "merge-fixture-vanity")
           and m4["replaced"].get("linkedin_url") == IN + urn4, (k4, m4.get("replaced")))
+    check("a keeper flag that does not name the dup stays",
+          one("SELECT count(*) FROM lead_tags WHERE lead_id=%s AND tag='expansion:do_not_push' "
+              "AND notes='client request'", (urn_keeper,)) == 1 and m4["retired"] == [])
     check("the vanity URL is the keeper's primary identity",
           one("SELECT count(*) FROM lead_identities WHERE lead_id=%s AND kind='linkedin_url' AND value=%s "
               "AND is_primary", (urn_keeper, IN + "merge-fixture-vanity")) == 1)

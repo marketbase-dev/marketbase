@@ -125,7 +125,8 @@ def plan(cur, pairs) -> tuple[list[dict], list[tuple[str, str, str]]]:
             m = m if isinstance(m, dict) else json.loads(m)
             out.append({"dup": dup, "keeper": keeper, "moved": m["moved"], "stayed": m["stayed"],
                         "filled": m["filled"], "cleared": m["cleared"],
-                        "replaced": m.get("replaced", {})})
+                        "replaced": m.get("replaced", {}),
+                        "retired": len(m.get("retired", []))})
             cur.execute("RELEASE SAVEPOINT pair")
         except Exception as e:  # noqa: BLE001
             cur.execute("ROLLBACK TO SAVEPOINT pair")
@@ -146,10 +147,37 @@ def show(cur, results, failed, why) -> None:
         stayed = {k: len(v) for k, v in r["stayed"].items()}
         print(f"    stays on the dup: {', '.join(f'{k} {v}' for k, v in stayed.items()) or 'nothing'}")
         print(f"    keeper filled: {', '.join(r['filled']) or 'nothing'};  dup cleared: {', '.join(r['cleared']) or 'nothing'}")
+        if r["retired"]:
+            print(f"    keeper's own flags naming the dup retired (audited): {r['retired']}")
         if r["replaced"]:
             print(f"    keeper's URN-form URL replaced by the dup's vanity URL: {r['replaced'].get('linkedin_url')}")
     for d, k, err in failed:
         print(f"\n  REFUSED {d} -> {k}: {err}")
+
+
+def retire_flags(conn, cur, args) -> int:
+    """Run retire_merge_flags() over every recorded merge; commit only on --execute
+    with --expect equal to the count the dry run printed."""
+    cur.execute("SELECT id::text, dup_id::text, keeper_id::text FROM lead_merges ORDER BY merged_at")
+    merges = cur.fetchall()
+    total = 0
+    for mid, dup, keeper in merges:
+        cur.execute("SELECT retire_merge_flags(%s)", (mid,))
+        n = cur.fetchone()[0]
+        if n:
+            print(f"  merge {mid}: keeper {describe(cur, keeper)}  flags retired {n}")
+        total += n
+    print(f"{args.client}: {len(merges)} merge(s), {total} stale flag row(s) to retire")
+    if not args.execute:
+        conn.rollback()
+        print(f"Dry run: nothing written. To retire, after approval: --retire-flags --execute --expect {total}")
+        return 0
+    if args.expect != total:
+        conn.rollback()
+        sys.exit(f"Refusing: {total} row(s) now, not the approved {args.expect}.")
+    conn.commit()
+    print(f"RETIRED {total} flag row(s), each audited in assertions")
+    return 0
 
 
 def main() -> int:
@@ -162,13 +190,19 @@ def main() -> int:
     ap.add_argument("--execute", action="store_true")
     ap.add_argument("--plan", help="the digest of the approved dry run (required with --execute)")
     ap.add_argument("--by", help="who approved the plan; recorded as lead_merges.merged_by")
+    ap.add_argument("--retire-flags", action="store_true",
+                    help="for merges made before 083: retire, audited, the keepers' flags naming their "
+                         "merged dup. Dry run unless --execute --expect N")
+    ap.add_argument("--expect", type=int, help="with --retire-flags --execute: the approved row count")
     args = ap.parse_args()
-    if args.execute and (not args.plan or not args.by or args.with_migration):
+    if args.execute and not args.retire_flags and (not args.plan or not args.by or args.with_migration):
         sys.exit("--execute needs --plan <digest> from an approved dry run and --by <who approved>, and never --with-migration")
 
     conn = lib.connect(args.client)
     cur = conn.cursor()
     cur.execute("SET lock_timeout = '10s'")
+    if args.retire_flags:
+        return retire_flags(conn, cur, args)
     if args.with_migration:
         cur.execute(MIGRATION.read_text())
         print(f"(080 applied inside this transaction; it is rolled back)")
