@@ -322,6 +322,23 @@ def run(conn) -> tuple[int, list[str]]:
     check("a keeper with its own vanity URL keeps it",
           one("SELECT linkedin_url FROM leads WHERE id=%s", (keeper,)) == IN + "merge-fixture-keeper")
 
+    # ── names: never a formatted None; a nameless keeper takes the dup's (084) ──
+    check("a lead named 'None None' is refused",
+          raises("INSERT INTO leads (linkedin_url, name) VALUES (%s, 'None None')",
+                 (IN + "merge-fixture-none",)) == REFUSED)
+    check("a lead with no name is allowed",
+          raises("INSERT INTO leads (linkedin_url, name) VALUES (%s, NULL)", (IN + "merge-fixture-null",)) is None)
+    urn5 = "ACoAA" + "MERGE" * 7 + "05"
+    cur.execute("INSERT INTO leads (linkedin_url, name) VALUES (%s, NULL) RETURNING id", (IN + "merge-fixture-nameless",))
+    nameless = cur.fetchone()[0]
+    cur.execute("SELECT lead_identity_claim(%s, 'linkedin_urn', %s, 'check_merge_lead')", (nameless, urn5))
+    named_dup = lead("merge-fixture-named", urn5)
+    cur.execute("SELECT merge_lead(%s, %s, 'check_merge_lead')", (named_dup, nameless))
+    check("a keeper with no name takes the dup's name",
+          one("SELECT name FROM leads WHERE id=%s", (nameless,)) == "Merge Fixture merge-fixture-named")
+    check("a keeper's own name is never overwritten",
+          one("SELECT name FROM leads WHERE id=%s", (keeper,)) == "Merge Fixture merge-fixture-keeper")
+
     conn.rollback()
     return total, fails
 
