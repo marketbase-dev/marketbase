@@ -14,12 +14,21 @@ Shape parity with comp-intel (`person_*` ↔ `lead_*`): `lead_identity_kinds` al
 
 **Blocked by:** competitor-intel ticket 05 (`merge_person`) merged and proven on its tier-1 pilot — cross-repo, so a note, not a file here.
 
-**Status:** ready-for-agent
+**Status:** built 2026-11-05 (schema/080, `scripts/check_merge_lead.py` 44/44 on a fresh database, `tools/merge_leads.py`); applying to the instances follows the merge.
 
-- [ ] Schema: `merged_into`, `merged_from_lead_id` on every child table, `lead_identity_conflicts`, `lead_merges`; guard test over `pg_constraint`
-- [ ] `lead_identity_claim()` writes a conflict row on `duplicate:`; the tag pair still lands; existing tests pass
-- [ ] `merge_lead()` fixture test: non-colliding rows re-pointed and stamped; colliding rows (a `campaign_members` twin) untouched on the dup; every table's row count unchanged; refuses already-merged / same-row / no-shared-URN
-- [ ] Refuse trigger raises on a write aimed at a merged lead
-- [ ] `dedupe_leads.py` refuses to run and names this ticket
+**As built (beyond the text above):**
+- The dup's own `flag:duplicate_lead` (and its paired `expansion:do_not_push`) stays on the dup: moved, it would mark the keeper a duplicate and stop it being pushed.
+- The dup's identity columns (`linkedin_url`, `linkedin_urn`, `member_urn`, `public_id`) are cleared and given to the keeper where the keeper's are NULL, so an upsert keyed on `linkedin_url` lands on the keeper; `lead_merges.cleared` keeps the values, and they are the keeper's identities.
+- The dup's other open conflicts are handed to the keeper (with `merged_from_` provenance), so a group of three merges one pair at a time.
+- 080 backfills conflict rows from the leads columns (the findings the claim made before it had a table), so existing pairs are mergeable.
+- `tools/merge_leads.py`: default keeper = most relationship history (child rows, the dup's own duplicate tags excluded), then the oldest row; `--pair DUP:KEEPER` overrides. Dry run → digest → `--execute --plan <digest>`, a per-pair transaction with an in-database snapshot (`merge_snapshot_rows`).
+- Callers that write a lead_id they looked up must resolve `leads.merged_into` (or go through lead_identities) once merges happen, or the refusal trigger fails them loudly. Known writers to check: sf_sync.py, the per-client bookings collectors, research_competitor.py, rehandle_leads.py, the Fresh engager harvesters, list_voice_posts.py / select_voices.py / import_voice_roster.py.
+- Open: one instance's ~1,400 rep/engager twins share a vanity URL, not a URN (open `linkedin_url` conflicts), so `merge_lead()` refuses them by the rule above.
+
+- [x] Schema: `merged_into`, `merged_from_lead_id` on every child table, `lead_identity_conflicts`, `lead_merges`; guard test over `pg_constraint`
+- [x] `lead_identity_claim()` writes a conflict row on `duplicate:`; the tag pair still lands; existing tests pass
+- [x] `merge_lead()` fixture test: non-colliding rows re-pointed and stamped; colliding rows (a `campaign_members` twin) untouched on the dup; every table's row count unchanged; refuses already-merged / same-row / no-shared-URN
+- [x] Refuse trigger raises on a write aimed at a merged lead
+- [x] `dedupe_leads.py` refuses to run and names this ticket
 - [ ] Migration follows the repo's bookkeeping rules (CI pushes; never from an unmerged branch; no back-dated stamps); applied to every client instance by the sanctioned path
 - [ ] Memory `identity-merge-is-non-destructive` and the platform TODO item updated to say the mechanism changed and why

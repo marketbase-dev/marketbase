@@ -165,3 +165,8 @@ jobs:
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_voice_policy_functions.py
+
+      - name: Lead merge re-points, refuses, deletes nothing (080)
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          python3 scripts/check_merge_lead.py
