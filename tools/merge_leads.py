@@ -124,7 +124,8 @@ def plan(cur, pairs) -> tuple[list[dict], list[tuple[str, str, str]]]:
             m = cur.fetchone()[0]
             m = m if isinstance(m, dict) else json.loads(m)
             out.append({"dup": dup, "keeper": keeper, "moved": m["moved"], "stayed": m["stayed"],
-                        "filled": m["filled"], "cleared": m["cleared"]})
+                        "filled": m["filled"], "cleared": m["cleared"],
+                        "replaced": m.get("replaced", {})})
             cur.execute("RELEASE SAVEPOINT pair")
         except Exception as e:  # noqa: BLE001
             cur.execute("ROLLBACK TO SAVEPOINT pair")
@@ -145,6 +146,8 @@ def show(cur, results, failed, why) -> None:
         stayed = {k: len(v) for k, v in r["stayed"].items()}
         print(f"    stays on the dup: {', '.join(f'{k} {v}' for k, v in stayed.items()) or 'nothing'}")
         print(f"    keeper filled: {', '.join(r['filled']) or 'nothing'};  dup cleared: {', '.join(r['cleared']) or 'nothing'}")
+        if r["replaced"]:
+            print(f"    keeper's URN-form URL replaced by the dup's vanity URL: {r['replaced'].get('linkedin_url')}")
     for d, k, err in failed:
         print(f"\n  REFUSED {d} -> {k}: {err}")
 
