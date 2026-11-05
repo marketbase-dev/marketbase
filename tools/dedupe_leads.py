@@ -343,7 +343,13 @@ def merge_group(cur, canon_id, dup_ids: list, stats: dict,
     stats["groups"] += 1
 
 
+RETIRED = ("dedupe_leads.py is retired (schema/080, .scratch/identity-merge/issues/01): it moved "
+           "children and then DELETEd the duplicate lead. Merge with tools/merge_leads.py, which "
+           "calls merge_lead(): it re-points, keeps the duplicate as merged_into, and deletes nothing.")
+
+
 def main() -> int:
+    sys.exit(RETIRED)
     p = argparse.ArgumentParser(description="Merge duplicate person rows.")
     p.add_argument("--client", required=True)
     p.add_argument("--execute", action="store_true",
