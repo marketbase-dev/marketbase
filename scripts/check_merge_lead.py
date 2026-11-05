@@ -122,11 +122,17 @@ def run(conn) -> tuple[int, list[str]]:
 
     # ── fixture ───────────────────────────────────────────────────────────────
     def lead(handle, urn=None, **cols):
-        names = ["linkedin_url", "linkedin_urn", "name"] + list(cols)
-        vals = [IN + handle, urn, "Merge Fixture " + handle] + list(cols.values())
+        # The URN is filed through the claim, the way the tools file one, not as
+        # leads.member_urn: some instances carry a unique index on member_urn, so
+        # two rows there can share a URN only in lead_identities.
+        names = ["linkedin_url", "name"] + list(cols)
+        vals = [IN + handle, "Merge Fixture " + handle] + list(cols.values())
         cur.execute(f"INSERT INTO leads ({', '.join(names)}) VALUES ({', '.join(['%s'] * len(vals))}) RETURNING id",
                     vals)
-        return cur.fetchone()[0]
+        lid = cur.fetchone()[0]
+        if urn:
+            cur.execute("SELECT lead_identity_claim(%s, 'linkedin_urn', %s, 'check_merge_lead')", (lid, urn))
+        return lid
 
     keeper = lead("merge-fixture-keeper", URN, current_title="Keeper title")
     dup = lead("merge-fixture-dup", URN, current_title="Dup title", city="Dup city",
