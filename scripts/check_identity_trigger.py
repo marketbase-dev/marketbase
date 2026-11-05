@@ -130,13 +130,25 @@ def run(conn) -> tuple[int, list[str]]:
           all(str(a) in n and "zz-test-vanity-a2" in n for _, n, _ in te), te)
     check("E: A is untouched", idents(a) == ia2)
 
-    # E2: a new lead carrying A's member URN. Instances that dedupe_leads.py has
-    # already deduped carry the partial-unique index uq_leads_member_urn (027),
-    # which rejects this at the column before any trigger runs, so there the
-    # case is reported as skipped rather than asserted.
+    # E2: a new lead carrying A's member URN. Since 082 every instance carries
+    # the partial-unique index uq_leads_member_urn, which rejects it at the
+    # column before any trigger runs: a second row for one member is a merge,
+    # never a second lead. Asserted, not skipped. (The trigger's duplicate path
+    # for a URN is still covered where the URN arrives through the claim:
+    # check_merge_lead.py.) A database without the index runs the old case.
     cur.execute("SELECT count(*) FROM pg_indexes WHERE tablename='leads' AND indexname='uq_leads_member_urn'")
     if cur.fetchone()[0]:
-        print("  skip E2: uq_leads_member_urn enforces member_urn uniqueness at the column here")
+        cur.execute("SAVEPOINT e2")
+        try:
+            cur.execute("INSERT INTO leads (linkedin_url, member_urn, name) VALUES (%s,%s,%s)",
+                        (IN + "zz-test-vanity-e2", URN_A, "Test E2"))
+            refused = None
+        except Exception as e:  # noqa: BLE001
+            refused = getattr(e, "sqlstate", None) or getattr(e, "pgcode", None)
+        cur.execute("ROLLBACK TO SAVEPOINT e2")
+        check("E2: a second lead with A's member URN is refused by uq_leads_member_urn",
+              refused == "23505", refused)
+        check("E2: A is untouched", idents(a) == ia2)
     else:
         cur.execute("INSERT INTO leads (linkedin_url, member_urn, name) VALUES (%s,%s,%s) RETURNING id",
                     (IN + "zz-test-vanity-e2", URN_A, "Test E2"))
