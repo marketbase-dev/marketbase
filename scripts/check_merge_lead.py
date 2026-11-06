@@ -322,6 +322,20 @@ def run(conn) -> tuple[int, list[str]]:
     check("a keeper with its own vanity URL keeps it",
           one("SELECT linkedin_url FROM leads WHERE id=%s", (keeper,)) == IN + "merge-fixture-keeper")
 
+    # ── email: cleared on the dup; a keeper with its own files the dup's as identity (086) ──
+    check("the merged dup holds no email",
+          one("SELECT email FROM leads WHERE id=%s", (dup,)) is None
+          and m["cleared"].get("email") == "merge-fixture@example.invalid")
+    urn6 = "ACoAA" + "MERGE" * 7 + "06"
+    k6 = lead("merge-fixture-k6", urn6, email="keeper6@example.invalid")
+    d6 = lead("merge-fixture-d6", urn6, email="Dup6@Example.invalid")
+    cur.execute("SELECT merge_lead(%s, %s, 'check_merge_lead')", (d6, k6))
+    check("a keeper with its own email keeps it, and the dup's is its non-primary identity",
+          one("SELECT email FROM leads WHERE id=%s", (k6,)) == "keeper6@example.invalid"
+          and one("SELECT email FROM leads WHERE id=%s", (d6,)) is None
+          and one("SELECT count(*) FROM lead_identities WHERE lead_id=%s AND kind='email' "
+                  "AND value='dup6@example.invalid' AND NOT is_primary", (k6,)) == 1)
+
     # ── names: never a formatted None; a nameless keeper takes the dup's (084) ──
     check("a lead named 'None None' is refused",
           raises("INSERT INTO leads (linkedin_url, name) VALUES (%s, 'None None')",
