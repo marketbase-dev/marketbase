@@ -30,6 +30,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import collections
 import hashlib
 import json
 import sys
@@ -180,6 +181,32 @@ def retire_flags(conn, cur, args) -> int:
     return 0
 
 
+def clear_emails(conn, cur, args) -> int:
+    """Run merge_lead_move_email() (086) over every recorded merge whose dup still holds
+    an email; commit only on --execute with --expect equal to the dry run's count."""
+    cur.execute("""SELECT m.id::text FROM lead_merges m JOIN leads d ON d.id = m.dup_id
+                    WHERE d.email IS NOT NULL ORDER BY m.merged_at""")
+    merges = [r[0] for r in cur.fetchall()]
+    outcomes = collections.Counter()
+    for mid in merges:
+        cur.execute("SELECT merge_lead_move_email(%s)", (mid,))
+        outcomes[cur.fetchone()[0]] += 1
+    cur.execute("SELECT count(*) FROM leads WHERE merged_into IS NOT NULL AND email IS NOT NULL")
+    left = cur.fetchone()[0]
+    print(f"{args.client}: {len(merges)} merged lead(s) holding an email; " +
+          ", ".join(f"{k} {v}" for k, v in outcomes.most_common()) + f"; still holding one after: {left}")
+    if not args.execute:
+        conn.rollback()
+        print(f"Dry run: nothing written. To clear, after approval: --clear-emails --execute --expect {len(merges)}")
+        return 0
+    if args.expect != len(merges) or left:
+        conn.rollback()
+        sys.exit(f"Refusing: {len(merges)} now (approved {args.expect}), {left} left after; rolled back.")
+    conn.commit()
+    print(f"CLEARED {len(merges)} merged lead email(s)")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Merge duplicate leads with merge_lead(); deletes nothing.")
     ap.add_argument("--client", required=True)
@@ -193,9 +220,14 @@ def main() -> int:
     ap.add_argument("--retire-flags", action="store_true",
                     help="for merges made before 083: retire, audited, the keepers' flags naming their "
                          "merged dup. Dry run unless --execute --expect N")
-    ap.add_argument("--expect", type=int, help="with --retire-flags --execute: the approved row count")
+    ap.add_argument("--clear-emails", action="store_true",
+                    help="for merges made before 086: clear the merged dups' emails (keeper takes it or "
+                         "files it as an identity). Dry run unless --execute --expect N")
+    ap.add_argument("--expect", type=int, help="with --retire-flags / --clear-emails --execute: the approved count")
     args = ap.parse_args()
-    if args.execute and not args.retire_flags and (not args.plan or not args.by or args.with_migration):
+    if args.execute and (args.retire_flags or args.clear_emails) and args.expect is None:
+        sys.exit("--execute needs --expect N from the dry run")
+    if args.execute and not (args.retire_flags or args.clear_emails) and (not args.plan or not args.by or args.with_migration):
         sys.exit("--execute needs --plan <digest> from an approved dry run and --by <who approved>, and never --with-migration")
 
     conn = lib.connect(args.client)
@@ -203,6 +235,8 @@ def main() -> int:
     cur.execute("SET lock_timeout = '10s'")
     if args.retire_flags:
         return retire_flags(conn, cur, args)
+    if args.clear_emails:
+        return clear_emails(conn, cur, args)
     if args.with_migration:
         cur.execute(MIGRATION.read_text())
         print(f"(080 applied inside this transaction; it is rolled back)")
