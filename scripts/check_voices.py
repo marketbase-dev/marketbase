@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the voice tables and the poster resolver (schema/073) against a
+"""Exercise the voice tables and the poster resolver (schema/073, targets since 087) against a
 database that already has every migration applied. Everything runs inside ONE
 transaction that is always rolled back: no row survives, on any instance.
 
@@ -81,7 +81,7 @@ def run(conn) -> tuple[int, list[str]]:
         return cur.fetchone()
 
     # ── empty table ──
-    cur.execute("SELECT count(*) FROM voices WHERE added_by='check_voices'")
+    cur.execute("SELECT count(*) FROM targets WHERE added_by='check_voices'")
     before = cur.fetchone()[0]
     cur.execute("SELECT * FROM v_voices WHERE added_by='check_voices'")
     check("v_voices works with no voices", cur.fetchall() == [] and before == 0)
@@ -137,9 +137,9 @@ def run(conn) -> tuple[int, list[str]]:
             "INSERT INTO voice_policy (voice_group, version, rationale, created_by) "
             "VALUES ('industry', 'zz-v1', 'why', 'check_voices')", code="23502")
 
-    # ── voices ──
-    ins = ("INSERT INTO voices (company_id, lead_id, voice_group, selected_by, policy_version, "
-           "added_by, added_reason) VALUES (%s, %s, %s, %s, %s, 'check_voices', 'zz test')")
+    # ── voices (targets with purpose social_listening, 087) ──
+    ins = ("INSERT INTO targets (company_id, lead_id, target_group, selected_by, policy_version, "
+           "purpose, added_by, added_reason) VALUES (%s, %s, %s, %s, %s, 'social_listening', 'check_voices', 'zz test')")
     for args_ in ((page, None, "competitor", "rule", "zz-v1"),
                   (show, None, "own", "manual", None),
                   (None, vanity, "industry", "client_roster", None)):
@@ -150,7 +150,7 @@ def run(conn) -> tuple[int, list[str]]:
     refused("a rule-selected voice without a policy version is refused", ins, (None, urn_lead, "competitor", "rule", None))
     refused("a policy version that does not exist is refused", ins, (None, urn_lead, "competitor", "rule", "zz-nope"), code=FK)
     refused("a half-recorded removal is refused",
-            "UPDATE voices SET removed_at=now() WHERE company_id=%s AND added_by='check_voices'", (page,))
+            "UPDATE targets SET removed_at=now() WHERE company_id=%s AND added_by='check_voices'", (page,))
 
     cur.execute("SELECT kind, name, canonical_url, posts_held FROM v_voices WHERE added_by='check_voices' ORDER BY kind")
     rows = cur.fetchall()
@@ -160,12 +160,26 @@ def run(conn) -> tuple[int, list[str]]:
         ("showcase_page", "ZZ Show", "https://www.linkedin.com/showcase/zz-voice-show", 1),
     ], rows)
 
-    cur.execute("UPDATE voices SET removed_at=now(), removed_by='check_voices', removed_reason='zz' "
+    cur.execute("UPDATE targets SET removed_at=now(), removed_by='check_voices', removed_reason='zz' "
                 "WHERE company_id=%s AND removed_at IS NULL", (page,))
     check("removing a voice is one row", cur.rowcount == 1)
     state, _ = attempt(ins, (page, None, "industry", "manual", None))
     check("a removed voice can be re-added, and the view shows only the active row",
           state is None and one("SELECT voice_group FROM v_voices WHERE company_id=%s", (page,)) == ("industry",), state)
+
+    # ── 087: one list of who is followed, each row saying what for ──
+    tins = ("INSERT INTO targets (company_id, lead_id, target_group, selected_by, purpose, added_by, added_reason) "
+            "VALUES (%s, %s, 'competitor', 'manual', %s, 'check_voices', 'zz test')")
+    refused("a target that does not say what it is for is refused",
+            "INSERT INTO targets (lead_id, target_group, selected_by, added_by, added_reason) "
+            "VALUES (%s, 'competitor', 'manual', 'check_voices', 'zz')", (urn_lead,), code="23502")
+    refused("an unknown purpose is refused", tins, (None, urn_lead, "bystanding"))
+    state, _ = attempt(tins, (page, None, "connection_tracking"))
+    check("an entity followed for social listening can also be tracked for connections", state is None, state)
+    refused("a second active connection-tracking row for the same entity collides",
+            tins, (page, None, "connection_tracking"), code=UNIQUE)
+    check("v_voices shows only the social-listening row",
+          one("SELECT count(*) FROM v_voices WHERE company_id=%s", (page,)) == (1,))
 
     return total, fails
 

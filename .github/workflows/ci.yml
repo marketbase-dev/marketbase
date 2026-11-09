@@ -146,7 +146,7 @@ jobs:
 
       # 073's voices are keyed by entity id and posts learn their author's id
       # from a trigger: prove both, on an empty table and on seeded rows.
-      - name: Voices and poster resolution behave (073)
+      - name: Voices, targets and poster resolution behave (073, 087)
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_voices.py

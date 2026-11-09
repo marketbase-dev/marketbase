@@ -47,7 +47,7 @@ MOVES = [
     ("post_engagements", "lead_id"), ("lead_tags", "lead_id"),
     ("lead_signals", "lead_id"), ("lead_conversations", "lead_id"),
     ("lead_meetings", "lead_id"), ("signals", "subject_lead_id"),
-    ("assertions", "subject_lead_id"), ("voices", "lead_id"),
+    ("assertions", "subject_lead_id"), ("targets", "lead_id"),
     ("lead_touches", "lead_id"), ("crm_leads", "lead_id"), ("crm_contacts", "lead_id"),
 ]
 SPECIAL = {("lead_identities", "lead_id"), ("lead_identity_conflicts", "lead_id"),
@@ -182,8 +182,8 @@ def run(conn) -> tuple[int, list[str]]:
                     "VALUES ('fixture', 'shared', 'fixture', %s)", (lid,))                                    # *
         cur.execute("INSERT INTO assertions (namespace, key, asserted_by, subject_lead_id) "
                     "VALUES ('fixture', %s, 'fixture', %s)", (suffix, lid))
-        cur.execute("INSERT INTO voices (voice_group, selected_by, added_by, added_reason, lead_id) "
-                    "VALUES ('industry', 'manual', 'fixture', 'fixture', %s)", (lid,))                        # *
+        cur.execute("INSERT INTO targets (target_group, purpose, selected_by, added_by, added_reason, lead_id) "
+                    "VALUES ('industry', 'social_listening', 'manual', 'fixture', 'fixture', %s)", (lid,))    # *
         cur.execute("INSERT INTO lead_touches (lead_id, touched_at, rep, kind, source) "
                     "VALUES (%s, now(), 'fixture', 'call', 'fixture')", (lid,))
         cur.execute("INSERT INTO crm_leads (id, lead_id) VALUES (%s, %s)", ("fixture-lead-" + suffix, lid))
@@ -191,11 +191,11 @@ def run(conn) -> tuple[int, list[str]]:
 
     children(keeper, "k")
     children(dup, "d")
-    # colliding per table: campaign_members, lead_tags(shared), lead_signals, assertions(shared), voices
+    # colliding per table: campaign_members, lead_tags(shared), lead_signals, assertions(shared), targets
     # (lead_conversations differ by provider_chat_id but collide on (operator_id, lead_id, channel))
     COLLIDE = {"campaign_members.lead_id": 1, "lead_tags.lead_id": 3,   # shared + the duplicate pair
                "lead_signals.lead_id": 1, "lead_conversations.lead_id": 1,
-               "assertions.subject_lead_id": 1, "voices.lead_id": 1}
+               "assertions.subject_lead_id": 1, "targets.lead_id": 1}
 
     # ── refusals ──────────────────────────────────────────────────────────────
     check("refuses a pair with no shared URN",
