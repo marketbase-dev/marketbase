@@ -104,24 +104,24 @@ def run(conn) -> tuple[int, list[str]]:
         return one("INSERT INTO posts (post_urn, poster_linkedin_url) VALUES (%s, %s) "
                    "RETURNING poster_company_id, poster_lead_id", (urn, url))
 
-    check("a company-page post resolves to the company", post("zz-p1", "https://www.linkedin.com/company/zz-voice-page/") == (page, None))
-    check("a showcase-page post resolves to the showcase row", post("zz-p2", "https://www.linkedin.com/showcase/zz-voice-show") == (show, None))
-    check("a page slug matches case-insensitively", post("zz-p3", "https://www.linkedin.com/company/ZZ-Voice-Page") == (page, None))
-    check("a vanity-URL post resolves through lead_identities", post("zz-p4", IN + "zz-voice-vanity") == (None, vanity))
-    check("a member-URN post resolves through lead_identities", post("zz-p5", IN + URN) == (None, urn_lead))
-    check("a lead with no identity row resolves through leads.linkedin_url", post("zz-p6", IN + "zz-voice-keyonly") == (None, keyonly))
-    check("an unknown poster stays unresolved", post("zz-p7", IN + "zz-voice-nobody") == (None, None))
+    check("a company-page post resolves to the company", post("urn:li:activity:9000000000000000001", "https://www.linkedin.com/company/zz-voice-page/") == (page, None))
+    check("a showcase-page post resolves to the showcase row", post("urn:li:activity:9000000000000000002", "https://www.linkedin.com/showcase/zz-voice-show") == (show, None))
+    check("a page slug matches case-insensitively", post("urn:li:activity:9000000000000000003", "https://www.linkedin.com/company/ZZ-Voice-Page") == (page, None))
+    check("a vanity-URL post resolves through lead_identities", post("urn:li:activity:9000000000000000004", IN + "zz-voice-vanity") == (None, vanity))
+    check("a member-URN post resolves through lead_identities", post("urn:li:activity:9000000000000000005", IN + URN) == (None, urn_lead))
+    check("a lead with no identity row resolves through leads.linkedin_url", post("urn:li:activity:9000000000000000006", IN + "zz-voice-keyonly") == (None, keyonly))
+    check("an unknown poster stays unresolved", post("urn:li:activity:9000000000000000007", IN + "zz-voice-nobody") == (None, None))
     check("a writer-supplied id is kept", one("INSERT INTO posts (post_urn, poster_linkedin_url, poster_lead_id) "
-          "VALUES ('zz-p8', %s, %s) RETURNING poster_lead_id", (IN + "zz-voice-nobody", vanity))[0] == vanity)
+          "VALUES ('urn:li:activity:9000000000000000008', %s, %s) RETURNING poster_lead_id", (IN + "zz-voice-nobody", vanity))[0] == vanity)
     refused("a post naming both a company and a lead is refused",
-            "INSERT INTO posts (post_urn, poster_company_id, poster_lead_id) VALUES ('zz-p9', %s, %s)", (page, vanity))
+            "INSERT INTO posts (post_urn, poster_company_id, poster_lead_id) VALUES ('urn:li:activity:9000000000000000009', %s, %s)", (page, vanity))
     cur.execute("SELECT posts FROM v_posts_unresolved_poster WHERE poster_linkedin_url=%s", (IN + "zz-voice-nobody",))
     check("v_posts_unresolved_poster lists the unknown poster", cur.fetchone() == (1,))
 
     late = one("INSERT INTO leads (linkedin_url, name) VALUES (%s, 'ZZ Late') RETURNING id", (IN + "zz-voice-nobody",))[0]
     n = one("SELECT resolve_post_posters()")[0]
     check("resolve_post_posters picks up a poster created after the post",
-          n >= 1 and one("SELECT poster_lead_id FROM posts WHERE post_urn='zz-p7'")[0] == late, n)
+          n >= 1 and one("SELECT poster_lead_id FROM posts WHERE post_urn='urn:li:activity:9000000000000000007'")[0] == late, n)
 
     # ── voice_policy ──
     # 077 seeds an active house-default row per rule-picked group; set them aside so this

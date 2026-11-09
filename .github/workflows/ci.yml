@@ -151,6 +151,13 @@ jobs:
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_voices.py
 
+      # 088: a post is keyed on the number in its own link, a repost points at
+      # its original, and post listings never expire.
+      - name: Post keys and reposts behave (088)
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          python3 scripts/check_post_keys.py
+
       # 075: nothing deletes, foreign keys included. A new migration that
       # declares ON DELETE CASCADE / SET NULL fails here.
       - name: No foreign key cascades on delete (075)
