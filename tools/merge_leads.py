@@ -54,7 +54,7 @@ SNAPSHOT = {
     "post_engagements": ["lead_id"], "lead_tags": ["lead_id"],
     "lead_signals": ["lead_id"], "lead_conversations": ["lead_id"],
     "lead_meetings": ["lead_id"], "signals": ["subject_lead_id"],
-    "assertions": ["subject_lead_id"], "voices": ["lead_id"],
+    "assertions": ["subject_lead_id"], "targets": ["lead_id"],
     "lead_touches": ["lead_id"], "crm_leads": ["lead_id"], "crm_contacts": ["lead_id"],
 }
 
@@ -65,7 +65,7 @@ HISTORY = [("campaign_members", "lead_id"), ("lead_conversations", "lead_id"),
            ("lead_meetings", "lead_id"), ("lead_touches", "lead_id"), ("lead_actions", "lead_id"),
            ("lead_qualifications", "lead_id"), ("crm_leads", "lead_id"), ("crm_contacts", "lead_id"),
            ("lead_tags", "lead_id"), ("lead_sources", "lead_id"), ("post_engagements", "lead_id"),
-           ("posts", "poster_lead_id"), ("voices", "lead_id"), ("assertions", "subject_lead_id"),
+           ("posts", "poster_lead_id"), ("targets", "lead_id"), ("assertions", "subject_lead_id"),
            ("lead_signals", "lead_id"), ("signals", "subject_lead_id")]
 
 
