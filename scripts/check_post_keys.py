@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the post key rule, reposts, one reaction per person per post and the post-listing
-cache policy (schema/088, 089) against a database that already has every migration applied.
+cache policy (schema/088, 089, 090) against a database that already has every migration applied.
 Everything runs inside ONE transaction that is always rolled back.
 
 Why this exists: a post was stored under whichever of its two LinkedIn ids a
@@ -116,6 +116,10 @@ def run(conn) -> tuple[int, list[str]]:
     rx = "INSERT INTO post_engagements (post_id, lead_id, engagement_type, merged_from_lead_id) VALUES (%s, %s, %s, %s)"
     state, _ = attempt(rx, (orig[0], lead, "reaction", None))
     check("a reaction is accepted", state is None, state)
+    state, _ = attempt(rx, (orig[0], lead, "reaction", None))
+    check("a second reaction by the same person on the same post is refused (090)", state == "23505", state)
+    state, _ = attempt(rx, (orig[0], lead, "reaction", other))
+    check("a reaction a lead merge moved onto the keeper sits beside the keeper's own (090)", state is None, state)
     state, _ = attempt(rx, (orig[0], lead, "comment", None))
     state2, _ = attempt(rx, (orig[0], lead, "comment", None))
     check("a person may comment more than once", state is None and state2 is None, (state, state2))
