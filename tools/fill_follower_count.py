@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, load_client_env
+from lib import connect, load_client_env, lead_urn_sql
 from engagers_research import saleleads_get
 
 
@@ -76,8 +76,9 @@ def find_follower_count(name: str, urn: str | None, public_id: str | None) -> tu
 
 def select_targets(cur, *, where_tag: str | None, where_persona: list[str] | None,
                    where_blank: bool, refresh_days: int | None) -> list[dict]:
-    sql = """
-      SELECT DISTINCT l.id, l.name, l.linkedin_url, l.linkedin_urn, l.public_id,
+    # linkedin_urn is the member id from lead_identities (Identity ticket 5).
+    sql = f"""
+      SELECT DISTINCT l.id, l.name, l.linkedin_url, {lead_urn_sql('l')} AS linkedin_urn, l.public_id,
              l.follower_count, l.follower_count_updated_at
       FROM leads l
     """

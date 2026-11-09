@@ -27,6 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import post_impressions_report as pir  # reuse _uni_get / resolve_unipile_account
+from lib import lead_urn_sql
 import api_cache
 
 
@@ -112,9 +113,14 @@ def main():
     # Resolve provider_id (member URN) + full name from the leads table if not given.
     provider_id, full_name = args.provider_id, args.name
     with con.cursor() as cur:
-        cur.execute("""SELECT linkedin_urn, name FROM leads
-                       WHERE linkedin_url ILIKE %s AND linkedin_urn IS NOT NULL
-                       ORDER BY length(coalesce(linkedin_urn,'')) DESC LIMIT 1""",
+        # The member id comes from lead_identities (Identity ticket 5). Reading
+        # leads.linkedin_urn could hand Unipile a vanity slug as a provider_id,
+        # and only an ORDER BY length() kept the real URN in front.
+        urn = lead_urn_sql("l", ("linkedin_urn", "linkedin_urn_search"))
+        cur.execute(f"""SELECT urn, name FROM (
+                            SELECT {urn} AS urn, l.name, l.created_at FROM leads l
+                             WHERE l.linkedin_url ILIKE %s AND l.merged_into IS NULL) s
+                         WHERE urn IS NOT NULL ORDER BY created_at LIMIT 1""",
                     (f"%{args.profile}%",))
         r = cur.fetchone()
         if r:

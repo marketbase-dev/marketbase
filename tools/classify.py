@@ -44,7 +44,7 @@ from psycopg.types.json import Jsonb
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import (connect, normalize_linkedin_url, register_processor_from_yaml,
-                 lead_id_for_linkedin_url, lead_ids_for_linkedin_urls)
+                 lead_id_for_linkedin_url, lead_ids_for_linkedin_urls, lead_urn_sql)
 
 
 URL_COLUMNS = ("linkedin_url", "profile_url", "url", "linkedin", "LinkedIn URL")
@@ -581,8 +581,10 @@ def tag_swap_after_qualification(cur, lead_id, qualified, reason):
 # ───────────────────────── main per-lead loop ──────────────────────────────
 
 def lead_to_dict(cur, lead_id):
-    cur.execute("""
-        SELECT id, linkedin_url, linkedin_urn, public_id, name, headline,
+    # linkedin_urn is the member id from lead_identities (Identity ticket 5),
+    # not the leads column of the same name, which mostly holds slugs.
+    cur.execute(f"""
+        SELECT id, linkedin_url, {lead_urn_sql('leads')} AS linkedin_urn, public_id, name, headline,
                current_title, current_company, current_company_url,
                city, country, bio, last_enriched_at
         FROM leads WHERE id = %s
