@@ -151,9 +151,10 @@ jobs:
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_voices.py
 
-      # 088: a post is keyed on the number in its own link, a repost points at
-      # its original, and post listings never expire.
-      - name: Post keys and reposts behave (088)
+      # 088/089: a post is keyed on the number in its own link (a CHECK on every
+      # row since 089), a repost points at its original, one reaction per person
+      # per post, and post listings never expire.
+      - name: Post keys, reposts and reactions behave (088, 089)
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_post_keys.py

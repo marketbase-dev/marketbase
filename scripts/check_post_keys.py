@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Exercise the post key rule, reposts and the post-listing cache policy
-(schema/088) against a database that already has every migration applied.
+"""Exercise the post key rule, reposts, one reaction per person per post and the post-listing
+cache policy (schema/088, 089) against a database that already has every migration applied.
 Everything runs inside ONE transaction that is always rolled back.
 
 Why this exists: a post was stored under whichever of its two LinkedIn ids a
@@ -105,6 +105,24 @@ def run(conn) -> tuple[int, list[str]]:
     state, _ = attempt("INSERT INTO posts (post_urn, reposted_post_id) VALUES (%s, gen_random_uuid())",
                        ("urn:li:activity:7300000000000000009",))
     check("a repost of a post that does not exist is refused", state == FK, state)
+
+    # ── 089: the key rule is a CHECK on every row; one reaction per person per post ──
+    cur.execute("SELECT count(*) FROM pg_constraint WHERE conname = 'posts_key_matches_link' AND convalidated")
+    check("the post key rule is a validated CHECK on every row", cur.fetchone()[0] == 1)
+    lead = attempt("INSERT INTO leads (linkedin_url, name) VALUES (%s, 'ZZ Reactor') RETURNING id",
+                   ("https://www.linkedin.com/in/zz-post-keys-reactor",))[1][0]
+    other = attempt("INSERT INTO leads (linkedin_url, name) VALUES (%s, 'ZZ Other') RETURNING id",
+                    ("https://www.linkedin.com/in/zz-post-keys-other",))[1][0]
+    rx = "INSERT INTO post_engagements (post_id, lead_id, engagement_type, merged_from_lead_id) VALUES (%s, %s, %s, %s)"
+    state, _ = attempt(rx, (orig[0], lead, "reaction", None))
+    check("a reaction is accepted", state is None, state)
+    state, _ = attempt(rx, (orig[0], lead, "comment", None))
+    state2, _ = attempt(rx, (orig[0], lead, "comment", None))
+    check("a person may comment more than once", state is None and state2 is None, (state, state2))
+    state, _ = attempt(rx, (orig[0], lead, "repost", None))
+    check("a plain repost is recorded as a 'repost' engagement", state is None, state)
+    cur.execute("SELECT count(*) FROM source_types WHERE name = 'people_sweep'")
+    check("the people_sweep source type exists", cur.fetchone()[0] == 1)
 
     # ── post listings never expire ──
     cur.execute("""SELECT api, endpoint FROM enrichment_source_policy
