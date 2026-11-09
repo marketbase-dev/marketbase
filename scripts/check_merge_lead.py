@@ -153,7 +153,7 @@ def run(conn) -> tuple[int, list[str]]:
     camp = one("INSERT INTO campaigns (name, channel) VALUES ('merge fixture', 'manual') RETURNING id")
     op = one("INSERT INTO outbound_operators (display_name, channel, channel_identifier, unipile_account_id) "
              "VALUES ('merge fixture', 'linkedin', 'merge-fixture', 'merge-fixture') RETURNING id")
-    post = one("INSERT INTO posts (post_urn) VALUES ('urn:li:activity:merge-fixture') RETURNING id")
+    post = one("INSERT INTO posts (post_urn) VALUES ('urn:li:activity:9100000000000000000') RETURNING id")
 
     def children(lid, suffix):
         """One row in every moved table for lid. Rows marked * collide across the pair."""
@@ -166,7 +166,7 @@ def run(conn) -> tuple[int, list[str]]:
         cur.execute("INSERT INTO lead_actions (lead_id, action, requested_by) VALUES (%s, 'archive', %s)",
                     (lid, suffix))
         cur.execute("INSERT INTO posts (post_urn, poster_lead_id) VALUES (%s, %s)",
-                    ("urn:li:activity:merge-fixture-" + suffix, lid))
+                    ("urn:li:activity:91000000000000000" + {"k": "01", "d": "02"}[suffix], lid))
         cur.execute("INSERT INTO post_engagements (post_id, lead_id, engagement_type) VALUES (%s, %s, 'reaction')",
                     (post, lid))
         cur.execute("INSERT INTO lead_tags (lead_id, tag) VALUES (%s, 'fixture:shared')", (lid,))          # *
