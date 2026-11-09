@@ -53,6 +53,17 @@ def self_test() -> int:
          lib.member_urn_token(SEARCH) == SEARCH),
         ("the old name is gone, so it cannot regain the old meaning",
          not hasattr(lib, "linkedin_urn")),
+        # Identity ticket 5: member ids are read from lead_identities, never from
+        # the leads.linkedin_urn column, which holds vanity slugs.
+        ("lead_urn_sql reads lead_identities, not a leads column",
+         "FROM lead_identities" in lib.lead_urn_sql("l") and "l.linkedin_urn" not in lib.lead_urn_sql("l")
+         and "l.member_urn" not in lib.lead_urn_sql("l")),
+        ("lead_urn_sql keys on the outer alias",
+         "li.lead_id = x.id" in lib.lead_urn_sql("x")),
+        ("lead_urn_sql defaults to the ACoAA kind only",
+         "IN ('linkedin_urn')" in lib.lead_urn_sql("l")),
+        ("lead_urn_sql escapes its LIKE wildcard, so it survives bound parameters",
+         "'ACoAA%%'" in lib.lead_urn_sql("l")),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

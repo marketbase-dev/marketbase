@@ -116,6 +116,27 @@ def member_urn_token(*vals: str | None) -> str | None:
     return None
 
 
+def lead_urn_sql(alias: str = "l", kinds: tuple[str, ...] = ("linkedin_urn",)) -> str:
+    """SQL scalar subquery: the lead's LinkedIn member id, read from
+    `lead_identities`, the identity authority.
+
+    Read a member id through this, never from `leads.linkedin_urn` (42,208 slug
+    values that are not URNs) and not from `leads.member_urn` (a derived cache
+    that holds the ACwAA search form on some rows). This is Identity ticket 5,
+    2026-11-09. `alias` is the leads row's alias in the outer query. Pass
+    kinds=("linkedin_urn", "linkedin_urn_search") to accept the ACwAA alias as
+    a fallback where the consumer takes either form, as Unipile does. An ACoAA
+    value wins, then the linkedin_urn kind, then the primary row. The value
+    ordering matters because some ACwAA values were filed under kind
+    linkedin_urn before the alias kind existed (229 across the instances,
+    measured 2026-11-09)."""
+    kinds_sql = ", ".join(f"'{k}'" for k in kinds)
+    return (f"(SELECT li.value FROM lead_identities li WHERE li.lead_id = {alias}.id "
+            f"AND li.kind IN ({kinds_sql}) "
+            f"ORDER BY li.value LIKE 'ACoAA%%' DESC, li.kind = 'linkedin_urn' DESC, "
+            f"li.is_primary DESC, li.created_at LIMIT 1)")
+
+
 def resolve_canonical_url(cur, linkedin_url: str | None, *,
                           urn_hint: str | None = None) -> str | None:
     """Map an incoming (normalized) linkedin_url to the linkedin_url of the

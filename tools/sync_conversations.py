@@ -45,7 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import (
     connect, load_client_env, normalize_linkedin_url, linkedin_handle,
-    lead_id_for_linkedin_url,
+    lead_id_for_linkedin_url, lead_urn_sql,
 )
 
 
@@ -289,17 +289,18 @@ def sync_lead(conn, unipile_by_account: dict, operators: list[dict],
         if lead_id is None:
             summary["skipped"] = "lead not in MarketBase (no auto-create)"
             return summary
-        cur.execute("SELECT linkedin_urn FROM leads WHERE id = %s", (lead_id,))
+        cur.execute(f"SELECT {lead_urn_sql('leads', ('linkedin_urn', 'linkedin_urn_search'))} "
+                    "FROM leads WHERE id = %s", (lead_id,))
         stored_urn = cur.fetchone()[0]
         # Unipile's attendee_provider_id is the member's URN token. The slug we
         # extracted from the URL only works if the URL itself was in URN form
-        # (/in/AC…); for vanity URLs we fall back to leads.linkedin_urn (which
-        # the upload / enrichment pipeline can populate with the real URN, bare
-        # or as a full `urn:li:fsd_profile:AC…` string). Members span several
-        # URN prefixes (ACoAA, ACwAA, …) — accept the whole family.
+        # (/in/AC…); for vanity URLs we fall back to the lead's member id in
+        # lead_identities, the identity authority (Identity ticket 5; this read
+        # leads.linkedin_urn until 2026-11-09). Members span several URN
+        # prefixes (ACoAA, ACwAA, …) — accept the whole family.
         urn = li_urn_token(extracted) or li_urn_token(stored_urn)
         if not urn:
-            summary["skipped"] = "no LinkedIn URN available (vanity URL + leads.linkedin_urn not backfilled)"
+            summary["skipped"] = "no LinkedIn URN available (vanity URL and no member id in lead_identities)"
             return summary
 
         for op in operators:
