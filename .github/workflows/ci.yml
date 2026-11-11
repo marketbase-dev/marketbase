@@ -178,3 +178,11 @@ jobs:
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_merge_lead.py
+
+      # file_member_ids.py: an observed member ID lands or records the same person twice,
+      # a dead handle is settled once (tagged, conflict marked DECIDED), a name that does
+      # not match is skipped, and a second run writes nothing. Lookups are seeded; no network.
+      - name: Member IDs filed, dead handles settled (file_member_ids)
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          python3 scripts/check_file_member_ids.py
