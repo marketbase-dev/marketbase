@@ -21,7 +21,20 @@ the others collided with it). Pass --pair DUP:KEEPER to choose otherwise, e.g.
 the row that is a live Comp Intel target. Pairs run in the order given, so a
 group of three is two --pair arguments onto the same keeper.
 
+AUTO. --auto merges the whole queue with no digest and no approval, pair by pair,
+with the same snapshot, rowcount and merged_into checks as --execute. A shared
+verified URN is the whole test, and merge_lead() enforces it, so there is nothing
+left for a human to judge with one exception: a merge that would replace the
+keeper's URN-form URL with a vanity handle that disagrees with the keeper's own
+public_id (the dup's handle may be an OLD one, and URL-keyed joins would then miss
+the person). That pair is HELD, rolled back and logged. A refusal from a
+whole-table count race (a live writer on the instance) is retried, and otherwise
+left in the queue for the next run. Schedule `--all --auto` (hourly works well) so
+queues never wait for a person.
+
 Usage:
+  python3 merge_leads.py --client X --auto                   # merge the queue now
+  python3 merge_leads.py --all --auto                        # every MarketBase instance
   python3 merge_leads.py --client X                          # dry run, whole queue
   python3 merge_leads.py --client X --pair DUP:KEEPER ...    # dry run, chosen pairs
   python3 merge_leads.py --client X --with-migration         # before 080 is applied: plan, all rolled back
@@ -207,9 +220,72 @@ def clear_emails(conn, cur, args) -> int:
     return 0
 
 
+AUTO_BY = "merge_leads --auto"
+RACE = "count changed"          # merge_lead's whole-table count check tripped by a live writer
+
+
+def merge_one(conn, cur, dup: str, keeper: str, by: str) -> tuple[str, str]:
+    """One pair, one transaction. Returns (outcome, detail): merged / held / raced / refused."""
+    try:
+        cur.execute("SELECT public_id FROM leads WHERE id = %s", (keeper,))
+        keeper_pid = (cur.fetchone() or [None])[0]
+        cur.execute("SELECT gen_random_uuid()::text")
+        sid = cur.fetchone()[0]
+        n_snap = snapshot(cur, sid, dup, keeper)
+        cur.execute("SELECT merge_lead(%s, %s, %s)", (dup, keeper, by))
+        m = cur.fetchone()[0]
+        m = m if isinstance(m, dict) else json.loads(m)
+        new_url = (m.get("replaced") or {}).get("linkedin_url")
+        if new_url and keeper_pid and new_url.rstrip("/").rsplit("/", 1)[-1].lower() != keeper_pid.lower():
+            conn.rollback()
+            return "held", (f"would replace the keeper's URL with {new_url}, but the keeper's own "
+                            f"public_id is {keeper_pid}: possibly an old handle; verify, then merge by hand")
+        cur.execute("UPDATE lead_merges SET snapshot_ref = %s WHERE id = %s AND snapshot_ref IS NULL",
+                    (f"merge_snapshot_rows:{sid}", m["id"]))
+        if cur.rowcount != 1:
+            raise RuntimeError(f"expected 1 lead_merges row for {dup}, got {cur.rowcount}")
+        cur.execute("SELECT merged_into::text FROM leads WHERE id = %s", (dup,))
+        if cur.fetchone()[0] != keeper:
+            raise RuntimeError(f"{dup} is not merged into {keeper} after merge_lead")
+        conn.commit()
+        return "merged", f"lead_merges {m['id']}, snapshot {sid}, {n_snap} rows"
+    except Exception as e:  # noqa: BLE001
+        conn.rollback()
+        msg = str(e).splitlines()[0]
+        return ("raced" if RACE in msg else "refused"), msg
+
+
+def auto(client: str, attempts: int = 5) -> dict:
+    import time
+    conn = lib.connect(client)
+    cur = conn.cursor()
+    cur.execute("SET lock_timeout = '10s'")
+    conn.commit()
+    triples = queue_pairs(cur)
+    conn.rollback()
+    tally = collections.Counter()
+    for dup, keeper, why in triples:
+        for attempt in range(1, attempts + 1):
+            outcome, detail = merge_one(conn, cur, dup, keeper, AUTO_BY)
+            if outcome != "raced" or attempt == attempts:
+                break
+            time.sleep(5 * attempt)
+        tally[outcome] += 1
+        label = {"merged": "MERGED", "held": "HELD", "raced": "LEFT IN QUEUE (busy)", "refused": "REFUSED"}[outcome]
+        print(f"  {label} {describe(cur, dup)}\n      -> {describe(cur, keeper)}  ({why}): {detail}", flush=True)
+        conn.rollback()
+    conn.close()
+    print(f"{client}: {len(triples)} queued pair(s): " +
+          (", ".join(f"{k} {v}" for k, v in tally.most_common()) or "nothing to merge"), flush=True)
+    return dict(tally)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Merge duplicate leads with merge_lead(); deletes nothing.")
-    ap.add_argument("--client", required=True)
+    ap.add_argument("--client")
+    ap.add_argument("--all", action="store_true", help="with --auto: every MarketBase instance")
+    ap.add_argument("--auto", action="store_true",
+                    help="merge the whole queue now, no digest or approval")
     ap.add_argument("--pair", action="append", default=[], metavar="DUP:KEEPER",
                     help="a pair to merge, in order; default is the whole lead_merge_queue")
     ap.add_argument("--with-migration", action="store_true",
@@ -225,6 +301,22 @@ def main() -> int:
                          "files it as an identity). Dry run unless --execute --expect N")
     ap.add_argument("--expect", type=int, help="with --retire-flags / --clear-emails --execute: the approved count")
     args = ap.parse_args()
+    if args.auto:
+        if args.pair or args.execute or args.retire_flags or args.clear_emails or args.with_migration:
+            sys.exit("--auto merges the whole queue on its own; it takes only --client or --all")
+        if args.all == bool(args.client):
+            sys.exit("--auto needs exactly one of --client X or --all")
+        clients = lib.discover_instances() if args.all else [args.client]
+        refused = 0
+        for c in clients:
+            try:
+                refused += auto(c).get("refused", 0)
+            except SystemExit as e:
+                print(f"{c}: skipped: {e}", flush=True)
+                refused += 1
+        return 1 if refused else 0
+    if not args.client:
+        sys.exit("--client is required")
     if args.execute and (args.retire_flags or args.clear_emails) and args.expect is None:
         sys.exit("--execute needs --expect N from the dry run")
     if args.execute and not (args.retire_flags or args.clear_emails) and (not args.plan or not args.by or args.with_migration):

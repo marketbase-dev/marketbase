@@ -36,7 +36,7 @@ from pathlib import Path
 from psycopg.types.json import Jsonb
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, normalize_linkedin_url, load_client_env, resolve_canonical_url  # noqa: E402
+from lib import connect, normalize_linkedin_url, load_client_env, resolve_canonical_url, member_urn_token  # noqa: E402
 
 SOURCE_TYPE = "founder_network_export"
 PAGE_SIZE = 200
@@ -100,7 +100,8 @@ def import_for_operator(client: str, op: dict, base: str, key: str,
                         limit: int | None) -> dict:
     print(f"\n--- {op['name']} ({op['id']}) ---", flush=True)
     source_label = f"{op['name']} 1st-degree connections (Unipile sync)"
-    inserted_leads = appended_sources = skipped_no_url = 0
+    inserted_leads = appended_sources = skipped_no_url = already_today = 0
+    duplicate_pairs = []
 
     with connect(client) as conn, conn.cursor() as cur:
         since_flush = 0
@@ -119,6 +120,23 @@ def import_for_operator(client: str, op: dict, base: str, key: str,
             public_id = rel.get("public_identifier")
             li_url = resolve_canonical_url(cur, normalize_linkedin_url(li_url),
                                            urn_hint=urn)
+            # The instance may already hold this person twice: one row keyed on the
+            # vanity URL and one keyed on the ACoAA URL. The vanity row is the one
+            # resolved here, and writing the URN onto it would collide with the other
+            # row (uq_leads_member_urn). Keep the URN off the upsert; it is filed
+            # through lead_identity_claim below, which queues the pair for merge_leads.py.
+            token = member_urn_token(urn)
+            if token:
+                cur.execute("""SELECT id, linkedin_url FROM leads
+                                WHERE member_urn = %s AND linkedin_url <> %s LIMIT 1""",
+                            (token, li_url))
+                other = cur.fetchone()
+                if other:
+                    duplicate_pairs.append({"connection_url": li_url,
+                                            "urn_owner_lead_id": str(other[0]),
+                                            "urn_owner_url": other[1]})
+                    # queued for merge_leads.py below, once this row's id is known
+                    urn = None
             cur.execute("""
                 INSERT INTO leads (linkedin_url, linkedin_urn, public_id, name,
                                    headline, last_enriched_at)
@@ -135,6 +153,22 @@ def import_for_operator(client: str, op: dict, base: str, key: str,
             lead_id, was_inserted = cur.fetchone()
             if was_inserted:
                 inserted_leads += 1
+            # File the URN this relation proves on the row we resolved to. When another
+            # row already owns it, lead_identity_claim's duplicate path records the
+            # conflict, and the pair lands in lead_merge_queue for merge_leads.py.
+            if duplicate_pairs and duplicate_pairs[-1]["connection_url"] == li_url \
+                    and "claim" not in duplicate_pairs[-1]:
+                cur.execute("SELECT lead_identity_claim(%s, 'linkedin_urn', %s, %s, false, now())",
+                            (lead_id, token, f"import_founder_connections.py ({op['name']} relation)"))
+                duplicate_pairs[-1]["claim"] = cur.fetchone()[0]
+            # A re-run on the same day (resume after a crash) must not append a
+            # second source row for a connection this run already recorded.
+            cur.execute("""SELECT 1 FROM lead_sources WHERE lead_id = %s AND source_type = %s
+                              AND source_label = %s AND source_date = %s LIMIT 1""",
+                        (lead_id, SOURCE_TYPE, source_label, date.today()))
+            if cur.fetchone():
+                already_today += 1
+                continue
             cur.execute("""
                 INSERT INTO lead_sources (lead_id, source_type, source_label,
                                           source_date, raw_data)
@@ -153,6 +187,10 @@ def import_for_operator(client: str, op: dict, base: str, key: str,
     print(f"  ✓ {op['name']}: {appended_sources} relations imported "
           f"(new leads: {inserted_leads}, skipped no-url: {skipped_no_url})",
           flush=True)
+    print(f"    already recorded today: {already_today}; "
+          f"duplicate pairs queued for merge_leads.py: {len(duplicate_pairs)}", flush=True)
+    for d in duplicate_pairs:
+        print("    dup:", json.dumps(d), flush=True)
     return {"operator": op["name"], "imported": appended_sources,
             "new_leads": inserted_leads, "skipped_no_url": skipped_no_url}
 
@@ -168,8 +206,15 @@ def main() -> int:
     args = ap.parse_args()
 
     load_client_env(args.client)
-    base = "https://" + _env("UNIPILE_BASE_SERVER")
-    key = _env("UNIPILE_ACCESS_TOKEN")
+    # Two spellings exist: UNIPILE_BASE_SERVER (bare host) + UNIPILE_ACCESS_TOKEN, or
+    # UNIPILE_BASE_URL (with scheme) + UNIPILE_API_KEY. Both resolve from the
+    # client's own scope only.
+    if os.environ.get("UNIPILE_BASE_SERVER"):
+        base = "https://" + _env("UNIPILE_BASE_SERVER")
+        key = _env("UNIPILE_ACCESS_TOKEN")
+    else:
+        base = _env("UNIPILE_BASE_URL").rstrip("/")
+        key = _env("UNIPILE_API_KEY")
 
     ops = fetch_active_operators(args.client)
     if args.operator_name:
