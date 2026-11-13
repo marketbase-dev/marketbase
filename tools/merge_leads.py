@@ -235,7 +235,12 @@ def merge_one(conn, cur, dup: str, keeper: str, by: str) -> tuple[str, str]:
         cur.execute("SELECT merge_lead(%s, %s, %s)", (dup, keeper, by))
         m = cur.fetchone()[0]
         m = m if isinstance(m, dict) else json.loads(m)
-        new_url = (m.get("replaced") or {}).get("linkedin_url")
+        # merge_lead() reports the URL it REPLACED (the keeper's old URN-form one), so read the
+        # keeper's URL as it now stands, inside this transaction, and compare that.
+        new_url = None
+        if (m.get("replaced") or {}).get("linkedin_url"):
+            cur.execute("SELECT linkedin_url FROM leads WHERE id = %s", (keeper,))
+            new_url = cur.fetchone()[0]
         if new_url and keeper_pid and new_url.rstrip("/").rsplit("/", 1)[-1].lower() != keeper_pid.lower():
             conn.rollback()
             return "held", (f"would replace the keeper's URL with {new_url}, but the keeper's own "
