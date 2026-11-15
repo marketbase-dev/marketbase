@@ -31,6 +31,12 @@ from lib import env_path, apply_schema, MIGRATIONS
 
 ORG_ID_DEFAULT = "<your-neon-org-id>"   # Impact 11
 
+# Compute size for a new instance: autoscaling from 0.25 to 1 compute unit.
+# Neon bills awake time x size, and an instance spends most of its awake
+# time waiting on the Python that calls it, so the floor is what the bill is
+# made of. Without this flag a project can come up at a fixed, larger size.
+DEFAULT_CU = "0.25-1"
+
 
 def run_neonctl(*args, json_out=True) -> dict | list | str:
     cmd = ["npx", "-y", "neonctl", *args]
@@ -62,6 +68,7 @@ def create_project(name: str, org_id: str, region: str = "aws-us-east-1") -> dic
     res = run_neonctl(
         "projects", "create",
         "--name", name, "--org-id", org_id, "--region-id", region,
+        "--cu", DEFAULT_CU,
     )
     # `projects create` returns {project: {...}, connection_uris: [...], ...}
     if isinstance(res, dict) and "project" in res: return res
