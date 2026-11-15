@@ -1,0 +1,393 @@
+#!/usr/bin/env python3
+"""sync_collectives.py — groups, communities and events, and who belongs to them (schema 096).
+
+Reads what the instance already holds and files it as collectives and memberships. It calls no
+provider. Every stage can be re-run: collectives and memberships are upserted, and a status that
+changed since the last run lands in collective_membership_changes through the table's trigger.
+
+  events         every event-guest row in lead_sources (Luma, Partiful) becomes a membership of
+                 that event: the application outcome (applied, approved, declined, waitlisted,
+                 invited), attendance, and the source's own wording. A guest's phone number is
+                 filed as a `phone` identity, so the same person in a messaging group is found
+                 by number instead of becoming a second person.
+  chats          every messaging group an operator can see (operator_chats, 094) becomes a
+                 collective, and EVERY chat member, of groups and of direct chats, becomes a
+                 person: found by member id or number when already on file, else created with
+                 the name the network shows. Group members get a membership (member | left).
+  join-requests  lead_sources rows of a group join request become `applied` memberships of the
+                 group they name, when exactly one group has that name.
+  tag            --tag T --name N [--kind community] [--attended]: everyone carrying tag T
+                 becomes a member of a collective named N (for a tag that stood in for a group).
+  retire-tag     --tag T --message M: mark the tag retired. Writing it then fails with M, and so
+                 does any reader that wraps the name in live_tag().
+  report         counts.
+
+People are matched on exact identities only (member id, number, e-mail, profile URL). Identities
+are written through lead_identity_claim(), so a value another person already holds queues the
+pair for merge_lead() instead of being reassigned.
+
+Usage:
+  python3 sync_collectives.py events --client <Name>
+  python3 sync_collectives.py chats --client <Name>
+  python3 sync_collectives.py retire-tag --client <Name> --tag audience:x --message "..."
+"""
+from __future__ import annotations
+
+import argparse
+import collections
+import json
+import re
+import sys
+import uuid
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib import connect  # noqa: E402
+
+ME = "sync_collectives.py"
+BATCH = 500
+PHONE_NAME = re.compile(r"^\+?[\d\s()\-.]{6,}$")
+PRIORITY = {"email": 0, "linkedin_url": 1, "phone": 2, "whatsapp": 3, "linkedin_urn": 4}
+
+# How each guest-list source words its statuses: (provider, event id key, status key, status map,
+# check-in test, check-in time key, phone key).
+EVENT_SOURCES = {
+    "luma_event_guest": dict(
+        provider="luma", event_key="event_api_id", status_key="approval_status",
+        status={"approved": "approved", "pending_approval": "applied", "declined": "declined",
+                "waitlist": "waitlisted", "invited": "invited"},
+        attended=lambda r: bool(r.get("checked_in_at")), attended_at="checked_in_at", phone="phone_number"),
+    "partiful_event_guest": dict(
+        provider="partiful", event_key="event_id", status_key="Status",
+        status={"approved": "approved", "pending": "applied", "can't go": "declined", "waitlist": "waitlisted",
+                "invited": "invited"},
+        attended=lambda r: str(r.get("Checked in") or "").strip().lower() == "yes", attended_at="Check-in Time",
+        phone="What is your phone number?"),
+}
+
+
+def phone(v) -> str | None:
+    d = re.sub(r"\D", "", str(v or ""))
+    return f"+{d}" if 7 <= len(d) <= 15 else None
+
+
+def chunks(seq, n=BATCH):
+    seq = list(seq)
+    for i in range(0, len(seq), n):
+        yield seq[i:i + n]
+
+
+def claim(cur, rows: list[tuple], source: str) -> collections.Counter:
+    """rows: (lead id, kind, value). Returns the outcomes of lead_identity_claim()."""
+    out = collections.Counter()
+    for part in chunks(rows):
+        cur.execute("""SELECT split_part(lead_identity_claim(l::uuid, k, v, %s, false, NULL), ':', 1)
+                         FROM unnest(%s::text[], %s::text[], %s::text[]) AS t(l, k, v)""",
+                    (source, [r[0] for r in part], [r[1] for r in part], [r[2] for r in part]))
+        out.update(r[0] for r in cur.fetchall())
+    return out
+
+
+def collective(cur, kind, name, provider, provider_id, source, operator_chat_id=None, raw=None) -> str:
+    cur.execute("""
+        INSERT INTO collectives (kind, name, provider, provider_id, operator_chat_id, source, raw)
+        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+        ON CONFLICT (provider, provider_id) DO UPDATE SET
+            name = COALESCE(EXCLUDED.name, collectives.name), last_seen_at = now(),
+            operator_chat_id = COALESCE(EXCLUDED.operator_chat_id, collectives.operator_chat_id)
+        RETURNING id::text""", (kind, name, provider, provider_id, operator_chat_id, source,
+                                json.dumps(raw) if raw is not None else None))
+    return cur.fetchone()[0]
+
+
+def upsert_memberships(cur, rows: list[dict]) -> int:
+    """rows: collective_id, kind, value, role, application, attended, attended_at, member_state,
+    source_status, source, source_ref, first_seen_at. One statement per batch; the trigger logs changes."""
+    n = 0
+    for part in chunks(rows):
+        cur.execute("""
+            INSERT INTO collective_memberships (collective_id, member_kind, member_value, role, application, attended,
+                                                attended_at, member_state, source_status, source, source_ref, first_seen_at)
+            SELECT (r->>'collective_id')::uuid, r->>'kind', r->>'value', COALESCE(r->>'role', 'member'), r->>'application',
+                   (r->>'attended')::boolean, NULLIF(r->>'attended_at', '')::timestamptz, r->>'member_state',
+                   r->>'source_status', r->>'source', r->>'source_ref',
+                   COALESCE(NULLIF(r->>'first_seen_at', '')::timestamptz, now())
+              FROM jsonb_array_elements(%s::jsonb) r
+            ON CONFLICT (collective_id, member_kind, member_value) DO UPDATE SET
+                role = EXCLUDED.role, application = COALESCE(EXCLUDED.application, collective_memberships.application),
+                attended = COALESCE(EXCLUDED.attended, collective_memberships.attended),
+                attended_at = COALESCE(EXCLUDED.attended_at, collective_memberships.attended_at),
+                member_state = COALESCE(EXCLUDED.member_state, collective_memberships.member_state),
+                source_status = COALESCE(EXCLUDED.source_status, collective_memberships.source_status),
+                source = EXCLUDED.source, source_ref = EXCLUDED.source_ref, last_seen_at = now()""",
+                    (json.dumps(part, default=str),))
+        n += cur.rowcount
+    return n
+
+
+def member_identity(cur, lead_ids: list[str]) -> dict[str, tuple[str, str]]:
+    """The identity a membership is keyed by, per person: the best one on file."""
+    best: dict[str, tuple] = {}
+    for part in chunks(lead_ids, 2000):
+        cur.execute("SELECT lead_id::text, kind, value FROM lead_identities WHERE lead_id::text = ANY(%s)", (part,))
+        for lid, kind, value in cur.fetchall():
+            rank = (PRIORITY.get(kind, 9), value)
+            if lid not in best or rank < best[lid][0]:
+                best[lid] = (rank, kind, value)
+    return {lid: (b[1], b[2]) for lid, b in best.items()}
+
+
+def existing_keys(cur) -> dict[tuple, tuple]:
+    """(collective, person) -> the identity an earlier run keyed that membership by, so a person who
+    gained a better identity since does not get a second membership."""
+    cur.execute("""SELECT collective_id::text, lead_id::text, member_kind, member_value FROM v_collective_members
+                    WHERE lead_id IS NOT NULL""")
+    return {(c, l): (k, v) for c, l, k, v in cur.fetchall()}
+
+
+# ── events ─────────────────────────────────────────────────────────────────────
+def stage_events(conn, a) -> int:
+    cur = conn.cursor()
+    cur.execute("""SELECT s.id::text, s.lead_id::text, s.source_type, s.source_label, s.raw_data, s.recorded_at
+                     FROM lead_sources s JOIN leads l ON l.id = s.lead_id
+                    WHERE s.source_type = ANY(%s) AND l.merged_into IS NULL
+                    ORDER BY s.recorded_at""", (list(EVENT_SOURCES),))
+    rows = cur.fetchall()
+    ident = member_identity(cur, sorted({r[1] for r in rows}))
+    known = existing_keys(cur)
+    n = collections.Counter()
+    events: dict[tuple, str] = {}
+    members: dict[tuple, dict] = {}
+    phones = []
+    for sid, lead, stype, label, raw, recorded in rows:
+        cfg = EVENT_SOURCES[stype]
+        eid = raw.get(cfg["event_key"])
+        if not eid:
+            n["no event id"] += 1
+            continue
+        key = (cfg["provider"], eid)
+        if key not in events:
+            name = re.sub(r"\s*\((Luma|Partiful) [^)]*\)\s*$", "", label or "").strip() or None
+            events[key] = collective(cur, "event", name, cfg["provider"], eid, f"{ME} events ({stype})")
+        if lead not in ident:
+            n["guest with no identity on file"] += 1
+            continue
+        cid = events[key]
+        kind, value = known.get((cid, lead)) or ident[lead]
+        status = str(raw.get(cfg["status_key"]) or "").replace("\xa0", " ").strip()
+        attended = cfg["attended"](raw)
+        # later rows of the same guest replace earlier ones: the list is ordered by recorded_at
+        members[(cid, lead)] = dict(
+            collective_id=cid, kind=kind, value=value, role="guest",
+            application=cfg["status"].get(status.lower()), attended=attended if attended else None,
+            attended_at=raw.get(cfg["attended_at"]) if attended else None, source_status=status or None,
+            source=f"lead_sources:{stype}", source_ref=sid, first_seen_at=recorded)
+        if status and status.lower() not in cfg["status"]:
+            n[f"status not mapped: {status}"] += 1
+        p = phone(raw.get(cfg["phone"]))
+        if p:
+            phones.append((lead, "phone", p))
+    n["events"] = len(events)
+    n["memberships written"] = upsert_memberships(cur, list(members.values()))
+    for k, v in claim(cur, sorted(set(phones)), f"{ME} events").items():
+        n[f"phone {k}"] += v
+    conn.commit()
+    print("events:", dict(n))
+    return 0
+
+
+# ── chats ──────────────────────────────────────────────────────────────────────
+def stage_chats(conn, a) -> int:
+    cur = conn.cursor()
+    n = collections.Counter()
+    cur.execute("""INSERT INTO source_types (name, description, purpose, created_by)
+                   VALUES ('operator_chat_member', 'A person seen in an operator''s own messaging chats: a member of '
+                           'one of the operator''s groups, or the other side of a direct chat (094).',
+                           'People the operator knows through a messaging network.', %s)
+                   ON CONFLICT (name) DO NOTHING""", (ME,))
+    cur.execute("""SELECT c.id::text, c.provider_chat_id, c.provider_thread_id, c.kind, c.title, o.channel, o.display_name
+                     FROM operator_chats c JOIN outbound_operators o ON o.id = c.operator_id""")
+    chats = {r[0]: r for r in cur.fetchall()}
+    coll = {}
+    for chat_id, pcid, thread, kind, title, channel, op_name in chats.values():
+        if kind == "group":
+            coll[chat_id] = collective(cur, "group", title, channel, thread or pcid, f"{ME} chats", operator_chat_id=chat_id)
+    n["group collectives"] = len(coll)
+    conn.commit()
+
+    cur.execute("""SELECT m.chat_id::text, m.provider_member_id, m.phone, m.display_name, m.left_at, m.first_seen_at
+                     FROM operator_chat_members m WHERE NOT m.is_self""")
+    rows = cur.fetchall()
+    people: dict[str, dict] = {}
+    for chat_id, mid, ph, name, left, first in rows:
+        p = people.setdefault(mid, {"phone": None, "names": collections.Counter(), "chats": set()})
+        p["phone"] = p["phone"] or phone(ph)
+        if name and name.strip() and not PHONE_NAME.match(name.strip()):
+            p["names"][name.strip()] += 1
+        p["chats"].add(chat_id)
+    lid_kind = "whatsapp_lid"
+    cur.execute("SELECT kind, value, lead_id::text FROM lead_identities WHERE kind IN (%s, 'whatsapp', 'phone')", (lid_kind,))
+    owner = {(k, v): l for k, v, l in cur.fetchall()}
+
+    new_leads, claims, sources = [], [], []
+    for mid, p in people.items():
+        lead = owner.get((lid_kind, mid)) or (p["phone"] and (owner.get(("whatsapp", p["phone"]))
+                                                               or owner.get(("phone", p["phone"]))))
+        if lead:
+            n["people already on file"] += 1
+        else:
+            lead = str(uuid.uuid4())
+            name = p["names"].most_common(1)[0][0] if p["names"] else None
+            new_leads.append((lead, name))
+            op = chats[next(iter(p["chats"]))]
+            sources.append((lead, f"{op[6]} {op[5]} chats", json.dumps(
+                {"_source": ME, "member_id": mid, "phone": p["phone"], "chats": len(p["chats"])})))
+        if (lid_kind, mid) not in owner:
+            claims.append((lead, lid_kind, mid))
+        if p["phone"] and ("whatsapp", p["phone"]) not in owner:
+            claims.append((lead, "whatsapp", p["phone"]))
+        p["lead"] = lead
+    for part in chunks(new_leads):
+        cur.execute("""INSERT INTO leads (id, name) SELECT l::uuid, n FROM unnest(%s::text[], %s::text[]) AS t(l, n)""",
+                    ([x[0] for x in part], [x[1] for x in part]))
+        n["people created"] += cur.rowcount
+        conn.commit()
+    for part in chunks(sources):
+        cur.execute("""INSERT INTO lead_sources (lead_id, source_type, source_label, source_date, raw_data)
+                       SELECT l::uuid, 'operator_chat_member', s, current_date, r::jsonb
+                         FROM unnest(%s::text[], %s::text[], %s::text[]) AS t(l, s, r)""",
+                    ([x[0] for x in part], [x[1] for x in part], [x[2] for x in part]))
+        conn.commit()
+    for part in chunks(claims, 2000):
+        for k, v in claim(cur, part, f"{ME} chats").items():
+            n[f"identity {k}"] += v
+        conn.commit()
+
+    members = [dict(collective_id=coll[chat_id], kind=lid_kind, value=mid, role="member",
+                    member_state="left" if left else "member", source="operator_chat_members",
+                    source_ref=chat_id, first_seen_at=first)
+               for chat_id, mid, ph, name, left, first in rows if chat_id in coll]
+    for part in chunks(members, 2000):
+        n["memberships written"] += upsert_memberships(cur, part)
+        conn.commit()
+    print("chats:", dict(n))
+    return 0
+
+
+# ── join requests ──────────────────────────────────────────────────────────────
+def stage_join_requests(conn, a) -> int:
+    cur = conn.cursor()
+    cur.execute("""SELECT s.id::text, s.lead_id::text, s.raw_data FROM lead_sources s JOIN leads l ON l.id = s.lead_id
+                    WHERE s.source_type LIKE '%%group_join_request' AND l.merged_into IS NULL""")
+    rows = cur.fetchall()
+    cur.execute("SELECT name, array_agg(id::text) FROM collectives WHERE kind IN ('group', 'community') GROUP BY 1")
+    by_name = dict(cur.fetchall())
+    n = collections.Counter()
+    members, phones = [], []
+    for sid, lead, raw in rows:
+        ids = by_name.get(raw.get("group")) or []
+        p = phone(raw.get("phone"))
+        if len(ids) != 1 or not p:
+            n[f"skipped: {len(ids)} groups named {raw.get('group')!r}" if p else "skipped: no number"] += 1
+            continue
+        members.append(dict(collective_id=ids[0], kind="whatsapp", value=p, role="member", application="applied",
+                            source_status=f"join request ({raw.get('join_via') or 'unknown'})",
+                            source="lead_sources:group_join_request", source_ref=sid,
+                            first_seen_at=raw.get("requested_at")))
+        phones.append((lead, "whatsapp", p))
+    for k, v in claim(cur, phones, f"{ME} join-requests").items():
+        n[f"identity {k}"] += v
+    n["memberships written"] = upsert_memberships(cur, members)
+    conn.commit()
+    print("join-requests:", dict(n))
+    return 0
+
+
+# ── a tag that stood in for a group ────────────────────────────────────────────
+def stage_tag(conn, a) -> int:
+    cur = conn.cursor()
+    cur.execute("""SELECT t.lead_id::text, t.id::text, t.tagged_at FROM lead_tags t JOIN leads l ON l.id = t.lead_id
+                    WHERE t.tag = %s AND l.merged_into IS NULL""", (a.tag,))
+    rows = cur.fetchall()
+    if not rows:
+        sys.exit(f"nobody carries {a.tag}")
+    cid = collective(cur, a.kind, a.name, "tag", a.tag, f"{ME} tag")
+    ident = member_identity(cur, [r[0] for r in rows])
+    known = existing_keys(cur)
+    members = []
+    for lead, tid, at in rows:
+        if lead not in ident:
+            continue
+        kind, value = known.get((cid, lead)) or ident[lead]
+        members.append(dict(collective_id=cid, kind=kind, value=value, role="member",
+                            attended=True if a.attended else None, source=f"lead_tags:{a.tag}", source_ref=tid,
+                            first_seen_at=at))
+    n = upsert_memberships(cur, members)
+    conn.commit()
+    print(f"tag: {a.tag} -> {a.name!r} ({a.kind}): {len(rows)} carriers, {n} memberships written, "
+          f"{len(rows) - len(members)} without an identity")
+    return 0
+
+
+def stage_retire_tag(conn, a) -> int:
+    ns, _, key = a.tag.partition(":")
+    cur = conn.cursor()
+    cur.execute("SELECT entity_type FROM tag_definitions WHERE namespace = %s AND key = %s", (ns, key))
+    found = cur.fetchall()
+    if len(found) != 1:
+        sys.exit(f"{a.tag}: {len(found)} definitions, expected exactly 1")
+    cur.execute("""UPDATE tag_definitions SET retired_message = %s, deprecated_by = COALESCE(deprecated_by, %s)
+                    WHERE namespace = %s AND key = %s AND entity_type = %s""",
+                (a.message, a.replaced_by or "collective_memberships (096)", ns, key, found[0][0]))
+    if cur.rowcount != 1:
+        conn.rollback()
+        sys.exit(f"expected 1 row, got {cur.rowcount}")
+    conn.commit()
+    print(f"retired {a.tag}: writing it now fails with: {a.message}")
+    return 0
+
+
+def stage_report(conn, a) -> int:
+    cur = conn.cursor()
+    cur.execute("""SELECT c.kind, c.provider, count(DISTINCT c.id), count(m.id), count(DISTINCT v.lead_id)
+                     FROM collectives c LEFT JOIN collective_memberships m ON m.collective_id = c.id
+                     LEFT JOIN v_collective_members v ON v.membership_id = m.id
+                    GROUP BY 1, 2 ORDER BY 1, 2""")
+    print("kind, provider, collectives, memberships, people:")
+    for r in cur.fetchall():
+        print("  ", r)
+    cur.execute("""SELECT application, attended, member_state, count(*) FROM collective_memberships
+                    GROUP BY 1, 2, 3 ORDER BY 4 DESC""")
+    print("application, attended, member_state, memberships:")
+    for r in cur.fetchall():
+        print("  ", r)
+    cur.execute("SELECT count(*) FROM v_collective_members WHERE lead_id IS NULL")
+    print("memberships with no person:", cur.fetchone()[0])
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("stage", choices=["events", "chats", "join-requests", "tag", "retire-tag", "report"])
+    ap.add_argument("--client", required=True)
+    ap.add_argument("--tag")
+    ap.add_argument("--name")
+    ap.add_argument("--kind", default="community", choices=["group", "community", "event"])
+    ap.add_argument("--attended", action="store_true")
+    ap.add_argument("--message")
+    ap.add_argument("--replaced-by")
+    a = ap.parse_args()
+    if a.stage == "tag" and not (a.tag and a.name):
+        sys.exit("tag needs --tag and --name")
+    if a.stage == "retire-tag" and not (a.tag and a.message):
+        sys.exit("retire-tag needs --tag and --message")
+    conn = connect(a.client)
+    try:
+        return {"events": stage_events, "chats": stage_chats, "join-requests": stage_join_requests,
+                "tag": stage_tag, "retire-tag": stage_retire_tag, "report": stage_report}[a.stage](conn, a)
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
