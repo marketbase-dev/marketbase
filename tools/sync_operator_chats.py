@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""sync_operator_chats.py — an operator's own messaging chats into MarketBase (schema 093).
+"""sync_operator_chats.py — an operator's own messaging chats into MarketBase (schema 094).
 
 For each active `outbound_operators` row on a messaging channel (`whatsapp`) that has an
 `operator_sync_policy` row:

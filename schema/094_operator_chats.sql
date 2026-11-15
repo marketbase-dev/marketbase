@@ -1,4 +1,4 @@
--- 093_operator_chats.sql
+-- 094_operator_chats.sql
 --
 -- An operator's own chats on a messaging channel (WhatsApp first), who is in
 -- them, and their messages, synced daily from the operator's Unipile account.
