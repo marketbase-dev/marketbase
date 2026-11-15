@@ -20,6 +20,11 @@ changed since the last run lands in collective_membership_changes through the ta
                  becomes a member of a collective named N (for a tag that stood in for a group).
   retire-tag     --tag T --message M: mark the tag retired. Writing it then fails with M, and so
                  does any reader that wraps the name in live_tag().
+  propose        propose communities: a community a network reports as two same-name groups, and
+                 collectives whose names start with the same two words. Marked `inferred`; never
+                 replaces a decided link.
+  decide         --id C --by WHO with --parent ID | --new-parent NAME | --no-parent, --company-id ID |
+                 --no-company, --set-kind: one person's decision about one collective.
   report         counts.
 
 People are matched on exact identities only (member id, number, e-mail, profile URL). Identities
@@ -347,6 +352,122 @@ def stage_retire_tag(conn, a) -> int:
     return 0
 
 
+# ── communities ────────────────────────────────────────────────────────────────
+def name_key(name: str | None) -> list[str]:
+    """Words of a name for grouping: lower case, punctuation as spaces, a bracketed letter joined
+    to its word ("(N)YC" reads as "nyc")."""
+    s = re.sub(r"\((\w)\)", r"\1", (name or "").lower())
+    return re.findall(r"[^\W_]+", s)       # letters and digits of any script
+
+
+def community(cur, name: str, source: str) -> str:
+    slug = "-".join(name_key(name))
+    return collective(cur, "community", name, "manual", f"community:{slug}", source)
+
+
+def stage_propose(conn, a) -> int:
+    """Propose which collectives belong together. Two inferences, both marked `inferred`, neither ever
+    replacing a link someone decided:
+      twins  a messaging network reports a community as two groups with one name: the community itself,
+             whose members only its admins can see (5 or fewer listed), and its announcement group, which
+             lists everyone (20 or more). The first becomes kind community and the parent of the second.
+      stems  collectives whose names start with the same two words share a community of that name."""
+    cur = conn.cursor()
+    cur.execute("""SELECT c.id::text, c.kind, c.name, c.provider, c.parent_id::text, c.parent_source,
+                          (SELECT count(*) FROM collective_memberships m WHERE m.collective_id = c.id)
+                     FROM collectives c""")
+    rows = {r[0]: dict(id=r[0], kind=r[1], name=r[2], provider=r[3], parent=r[4], psrc=r[5], n=r[6]) for r in cur.fetchall()}
+    n = collections.Counter()
+
+    def link(child: str, parent: str):
+        c = rows[child]
+        if child == parent or c["psrc"] == "decided" or c["parent"] == parent:
+            return
+        cur.execute("""UPDATE collectives SET parent_id = %s, parent_source = 'inferred', parent_decided_by = %s,
+                              parent_decided_at = now()
+                        WHERE id = %s AND parent_source IS DISTINCT FROM 'decided'""", (parent, f"{ME} propose", child))
+        n["links proposed"] += cur.rowcount
+        c["parent"], c["psrc"] = parent, "inferred"
+
+    twins = collections.defaultdict(list)
+    for c in rows.values():
+        if c["kind"] in ("group", "community") and c["provider"] not in ("manual", "tag") and name_key(c["name"]):
+            twins[(c["provider"], " ".join(name_key(c["name"])))].append(c)
+    roots: dict[str, str] = {}
+    for (_, key), cs in twins.items():
+        big = max(cs, key=lambda c: c["n"])
+        small = sorted((c for c in cs if c is not big and c["n"] <= 5), key=lambda c: c["id"])
+        if len(cs) < 2 or big["n"] < 20 or not small:
+            continue
+        head = small[0]
+        if head["kind"] != "community":
+            cur.execute("UPDATE collectives SET kind = 'community' WHERE id = %s AND kind = 'group'", (head["id"],))
+            n["communities found as twins"] += cur.rowcount
+            head["kind"] = "community"
+        roots[key] = head["id"]
+        for c in cs:
+            link(c["id"], head["id"])
+
+    stems = collections.defaultdict(list)
+    for c in rows.values():
+        k = name_key(c["name"])
+        if len(k) >= 2 and len(k[0]) >= 2 and len(k[1]) >= 2 and c["provider"] != "manual":
+            stems[" ".join(k[:2])].append(c)
+    for stem, cs in stems.items():
+        if len({c["id"] for c in cs}) < 2 or len({" ".join(name_key(c["name"])) for c in cs}) < 2:
+            continue
+        root = roots.get(stem)
+        if not root:
+            shortest = min(cs, key=lambda c: len(c["name"]))
+            words = re.findall(r"[^\W_]+|\(\w\)\w+", shortest["name"])[:2]
+            root = community(cur, " ".join(words), f"{ME} propose")
+            rows.setdefault(root, dict(id=root, kind="community", name=" ".join(words), provider="manual",
+                                       parent=None, psrc=None, n=0))
+            n["communities proposed from names"] += 1
+        for c in cs:
+            if c["parent"] is None or c["psrc"] == "inferred":
+                top = rows.get(c["parent"] or "")
+                # a twin's community hangs under the stem community; its announcement group stays under the twin
+                link(c["id"] if not top or top["id"] == root else top["id"], root)
+    conn.commit()
+    print("propose:", dict(n))
+    return 0
+
+
+def stage_decide(conn, a) -> int:
+    """One person's decision about one collective, keyed by id: its community, its company, its kind."""
+    cur = conn.cursor()
+    cur.execute("SELECT name, kind FROM collectives WHERE id = %s", (a.id,))
+    row = cur.fetchone()
+    if not row:
+        sys.exit(f"no collective {a.id}")
+    sets, args = [], []
+    if a.parent or a.new_parent or a.no_parent:
+        parent = a.parent or (community(cur, a.new_parent, f"{ME} decide ({a.by})") if a.new_parent else None)
+        if parent:
+            cur.execute("SELECT kind FROM collectives WHERE id = %s", (parent,))
+            got = cur.fetchone()
+            if not got or got[0] != "community":
+                sys.exit(f"parent {parent} is not a community")
+        sets += ["parent_id = %s", "parent_source = 'decided'", "parent_decided_by = %s", "parent_decided_at = now()"]
+        args += [parent, a.by]
+    if a.company_id or a.no_company:
+        sets += ["company_id = %s", "company_source = 'decided'", "company_decided_by = %s", "company_decided_at = now()"]
+        args += [a.company_id, a.by]
+    if a.set_kind:
+        sets.append("kind = %s")
+        args.append(a.set_kind)
+    if not sets:
+        sys.exit("decide needs one of --parent, --new-parent, --no-parent, --company-id, --no-company, --set-kind")
+    cur.execute(f"UPDATE collectives SET {', '.join(sets)} WHERE id = %s", (*args, a.id))
+    if cur.rowcount != 1:
+        conn.rollback()
+        sys.exit(f"expected 1 row, got {cur.rowcount}")
+    conn.commit()
+    print(f"decided ({a.by}): {row[0]!r}: {', '.join(s.split(' = ')[0] for s in sets if 'decided' not in s)}")
+    return 0
+
+
 def stage_report(conn, a) -> int:
     cur = conn.cursor()
     cur.execute("""SELECT c.kind, c.provider, count(DISTINCT c.id), count(m.id), count(DISTINCT v.lead_id)
@@ -368,7 +489,8 @@ def stage_report(conn, a) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", choices=["events", "chats", "join-requests", "tag", "retire-tag", "report"])
+    ap.add_argument("stage", choices=["events", "chats", "join-requests", "tag", "retire-tag", "propose", "decide",
+                                      "report"])
     ap.add_argument("--client", required=True)
     ap.add_argument("--tag")
     ap.add_argument("--name")
@@ -376,14 +498,24 @@ def main() -> int:
     ap.add_argument("--attended", action="store_true")
     ap.add_argument("--message")
     ap.add_argument("--replaced-by")
+    ap.add_argument("--id", help="decide: the collective")
+    ap.add_argument("--parent", help="decide: id of the community it belongs to")
+    ap.add_argument("--new-parent", help="decide: name of a community to create and put it in")
+    ap.add_argument("--no-parent", action="store_true", help="decide: it belongs to no community")
+    ap.add_argument("--company-id", help="decide: the company behind it")
+    ap.add_argument("--no-company", action="store_true")
+    ap.add_argument("--set-kind", choices=["group", "community", "event"])
+    ap.add_argument("--by", help="decide: who decided")
     a = ap.parse_args()
     if a.stage == "tag" and not (a.tag and a.name):
         sys.exit("tag needs --tag and --name")
     if a.stage == "retire-tag" and not (a.tag and a.message):
         sys.exit("retire-tag needs --tag and --message")
+    if a.stage == "decide" and not (a.id and a.by):
+        sys.exit("decide needs --id and --by")
     conn = connect(a.client)
     try:
-        return {"events": stage_events, "chats": stage_chats, "join-requests": stage_join_requests,
+        return {"propose": stage_propose, "decide": stage_decide, "events": stage_events, "chats": stage_chats, "join-requests": stage_join_requests,
                 "tag": stage_tag, "retire-tag": stage_retire_tag, "report": stage_report}[a.stage](conn, a)
     finally:
         conn.close()
