@@ -57,6 +57,18 @@ PAGE = 250
 PHONE_NAME = re.compile(r"^\+?[\d\s()-]{6,}$")
 
 
+def scrub(v):
+    """The provider object minus NUL characters, which Postgres text and jsonb both refuse. One
+    WhatsApp message carrying a NUL failed a whole instance's message stage (2026-11-15)."""
+    if isinstance(v, str):
+        return v.replace("\x00", "")
+    if isinstance(v, list):
+        return [scrub(x) for x in v]
+    if isinstance(v, dict):
+        return {scrub(k): scrub(x) for k, x in v.items()}
+    return v
+
+
 class Unipile:
     def __init__(self, env: dict):
         if env.get("UNIPILE_ACCESS_TOKEN") and env.get("UNIPILE_BASE_SERVER"):
@@ -76,7 +88,7 @@ class Unipile:
             try:
                 with urllib.request.urlopen(req, timeout=120) as r:
                     self.calls += 1
-                    return json.loads(r.read())
+                    return scrub(json.loads(r.read()))
             except urllib.error.HTTPError as e:
                 err = f"HTTP {e.code} {e.read()[:200].decode(errors='ignore')}"
                 if e.code not in (429, 500, 502, 503, 504):
@@ -229,40 +241,53 @@ def sync_messages(conn, u: Unipile, op: dict, max_chats: int | None) -> dict:
     todo = todo[:max_chats] if max_chats else todo
     n = collections.Counter()
     for i, (chat_id, pcid, complete, synced) in enumerate(todo, 1):
-        oldest = None
-        reached_end = True
-        first_page = True
-        for page in u.pages(f"/api/v1/chats/{pcid}/messages"):
-            new = 0
-            for m in page:
-                if not m.get("id") or not m.get("timestamp"):
-                    continue
-                cur.execute("""
-                    INSERT INTO operator_chat_messages (chat_id, provider_message_id, sender_member_id,
-                                                        from_operator, sent_at, body, is_event, raw)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
-                    ON CONFLICT (chat_id, provider_message_id) DO NOTHING""",
-                    (chat_id, m["id"], m.get("sender_id"), bool(m.get("is_sender")), m["timestamp"],
-                     m.get("text"), bool(m.get("is_event")), json.dumps(m)))
-                new += cur.rowcount
-                oldest = min(oldest, m["timestamp"]) if oldest else m["timestamp"]
-            conn.commit()
-            n["stored"] += new
-            # A chat whose history is complete only needs the new messages: stop at the first
-            # page that added nothing. Without a backfill, the first sync keeps one page.
-            if (complete and new == 0) or (not complete and op["backfill"] == "from_first_sync" and first_page):
-                reached_end = complete or op["backfill"] == "from_first_sync"
-                break
-            first_page = False
-        cur.execute("""UPDATE operator_chats SET messages_synced_at = now(),
-                            oldest_message_at = LEAST(oldest_message_at, %s::timestamptz),
-                            history_complete = history_complete OR %s
-                        WHERE id = %s""", (oldest, reached_end, chat_id))
-        conn.commit()
-        n["chats"] += 1
+        # One chat that fails (a provider error, a payload Postgres refuses) must not stop the rest.
+        # Its committed pages stay; it is not stamped synced, so the next run picks it up again.
+        try:
+            n["stored"] += chat_messages(conn, cur, u, op, chat_id, pcid, complete)
+            n["chats"] += 1
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            n["failed"] += 1
+            print(f"    messages: chat {pcid} FAILED {type(e).__name__}: {str(e)[:200]}", flush=True)
         if i % 50 == 0:
             print(f"    messages: {i}/{len(todo)} chats, {n['stored']} stored", flush=True)
     return dict(n)
+
+
+def chat_messages(conn, cur, u: Unipile, op: dict, chat_id, pcid: str, complete: bool) -> int:
+    stored = 0
+    oldest = None
+    reached_end = True
+    first_page = True
+    for page in u.pages(f"/api/v1/chats/{pcid}/messages"):
+        new = 0
+        for m in page:
+            if not m.get("id") or not m.get("timestamp"):
+                continue
+            cur.execute("""
+                INSERT INTO operator_chat_messages (chat_id, provider_message_id, sender_member_id,
+                                                    from_operator, sent_at, body, is_event, raw)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                ON CONFLICT (chat_id, provider_message_id) DO NOTHING""",
+                (chat_id, m["id"], m.get("sender_id"), bool(m.get("is_sender")), m["timestamp"],
+                 m.get("text"), bool(m.get("is_event")), json.dumps(m)))
+            new += cur.rowcount
+            oldest = min(oldest, m["timestamp"]) if oldest else m["timestamp"]
+        conn.commit()
+        stored += new
+        # A chat whose history is complete only needs the new messages: stop at the first
+        # page that added nothing. Without a backfill, the first sync keeps one page.
+        if (complete and new == 0) or (not complete and op["backfill"] == "from_first_sync" and first_page):
+            reached_end = complete or op["backfill"] == "from_first_sync"
+            break
+        first_page = False
+    cur.execute("""UPDATE operator_chats SET messages_synced_at = now(),
+                        oldest_message_at = LEAST(oldest_message_at, %s::timestamptz),
+                        history_complete = history_complete OR %s
+                    WHERE id = %s""", (oldest, reached_end, chat_id))
+    conn.commit()
+    return stored
 
 
 # ── 4. pictures ────────────────────────────────────────────────────────────────
