@@ -15,6 +15,10 @@ For each active `outbound_operators` row on a messaging channel (`whatsapp`) tha
                chat pages back to the provider's oldest message when the policy backfills
                `all_history` (then `history_complete`); later syncs stop at the first page
                that holds nothing new.
+  4. pictures  every group's picture, cached raw in `enrichment_calls` (api `unipile`, endpoint
+               `/api/v1/chat_attendees/{id}/picture`, the chat id in params) within the
+               policy window (schema 095, 30 days). A group without one is cached as
+               {"picture": null}.
 
 Every provider object is stored raw on the row it creates, and the run commits per page, so a
 killed run resumes where it stopped. Leads are never created; people link to leads through
@@ -31,6 +35,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import collections
 import json
 import re
@@ -43,9 +48,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import api_cache  # noqa: E402
 from lib import connect, discover_instances, load_client_env  # noqa: E402
 
 CHANNELS = {"whatsapp": "WHATSAPP"}
+PICTURE = "/api/v1/chat_attendees/{id}/picture"
 PAGE = 250
 PHONE_NAME = re.compile(r"^\+?[\d\s()-]{6,}$")
 
@@ -77,6 +84,32 @@ class Unipile:
             except Exception as e:  # noqa: BLE001  transport errors on long runs
                 err = f"{type(e).__name__}: {e}"
         raise RuntimeError(f"{path}: {err}")
+
+    def picture(self, path: str) -> dict:
+        """An image route: {"content_type", "bytes", "base64"}, {"picture": None} when the provider
+        has none (404), or {"_error": ...} (not cached, so the next run asks again)."""
+        err = None
+        for backoff in (0, 5, 30):
+            time.sleep(backoff)
+            req = urllib.request.Request(f"{self.base}{path}", headers={"X-API-KEY": self.key, "accept": "*/*"})
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    self.calls += 1
+                    body = r.read()
+                    if not body:
+                        return {"picture": None}
+                    return {"content_type": r.headers.get("content-type"), "bytes": len(body),
+                            "base64": base64.b64encode(body).decode()}
+            except urllib.error.HTTPError as e:
+                self.calls += 1
+                if e.code == 404:
+                    return {"picture": None}
+                err = f"HTTP {e.code} {e.read()[:200].decode(errors='ignore')}"
+                if e.code not in (429, 500, 502, 503, 504):
+                    break
+            except Exception as e:  # noqa: BLE001
+                err = f"{type(e).__name__}: {e}"
+        return {"_error": err}
 
     def pages(self, path: str, **qs):
         cursor = None
@@ -232,6 +265,23 @@ def sync_messages(conn, u: Unipile, op: dict, max_chats: int | None) -> dict:
     return dict(n)
 
 
+# ── 4. pictures ────────────────────────────────────────────────────────────────
+def sync_pictures(conn, u: Unipile, op: dict, max_chats: int | None) -> dict:
+    cur = conn.cursor()
+    cur.execute("""SELECT provider_chat_id FROM operator_chats
+                    WHERE operator_id = %s AND kind = 'group' ORDER BY last_activity_at DESC NULLS LAST""",
+                (op["id"],))
+    todo = [r[0] for r in cur.fetchall()]
+    todo = todo[:max_chats] if max_chats else todo
+    n = collections.Counter()
+    for pcid in todo:
+        resp, hit = api_cache.cached_call(conn, "unipile", PICTURE, {"id": pcid},
+                                          lambda: u.picture(f"/api/v1/chat_attendees/{pcid}/picture"), cost=0)
+        n["cached" if hit else "none" if resp.get("picture", 1) is None else
+          "failed" if resp.get("_error") else "fetched"] += 1
+    return dict(n)
+
+
 def run(client: str, only: set[str], max_chats: int | None) -> int:
     env = load_client_env(client)
     conn = connect(client)
@@ -249,6 +299,8 @@ def run(client: str, only: set[str], max_chats: int | None) -> int:
             print("  members:", sync_members(conn, u, op, max_chats), flush=True)
         if "messages" in only:
             print("  messages:", sync_messages(conn, u, op, max_chats), flush=True)
+        if "pictures" in only:
+            print("  pictures:", sync_pictures(conn, u, op, max_chats), flush=True)
     conn.close()
     print(f"{client}: {u.calls} Unipile calls")
     return 0
@@ -259,7 +311,7 @@ def main() -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--client")
     g.add_argument("--all", action="store_true", help="every discovered instance")
-    ap.add_argument("--only", default="chats,members,messages")
+    ap.add_argument("--only", default="chats,members,messages,pictures")
     ap.add_argument("--max-chats", type=int, help="cap chats per stage (a smoke test)")
     a = ap.parse_args()
     only = {x.strip() for x in a.only.split(",")}
