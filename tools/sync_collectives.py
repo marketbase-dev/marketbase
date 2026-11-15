@@ -429,6 +429,23 @@ def stage_propose(conn, a) -> int:
                 top = rows.get(c["parent"] or "")
                 # a twin's community hangs under the stem community; its announcement group stays under the twin
                 link(c["id"] if not top or top["id"] == root else top["id"], root)
+    if getattr(a, "monitored_only", False):
+        # Keep a proposal only where its community holds a group the operator monitors (094):
+        # every other inferred link is withdrawn. Decided links are never touched.
+        cur.execute("""
+            WITH RECURSIVE up AS (
+                SELECT id, id AS root, parent_id FROM collectives
+                UNION ALL
+                SELECT up.id, c.id, c.parent_id FROM up JOIN collectives c ON c.id = up.parent_id),
+            top AS (SELECT id, root FROM up WHERE parent_id IS NULL),
+            live AS (SELECT DISTINCT t.root FROM top t JOIN collectives c ON c.id = t.id
+                       JOIN v_operator_chat_monitoring m ON m.chat_id = c.operator_chat_id AND m.monitor)
+            UPDATE collectives c SET parent_id = NULL, parent_source = NULL, parent_decided_by = %s,
+                                     parent_decided_at = now()
+              FROM top t
+             WHERE t.id = c.id AND c.parent_source = 'inferred' AND t.root NOT IN (SELECT root FROM live)""",
+                    (f"{ME} propose --monitored-only (withdrawn)",))
+        n["links withdrawn (no monitored group in the community)"] = cur.rowcount
     conn.commit()
     print("propose:", dict(n))
     return 0
@@ -506,6 +523,8 @@ def main() -> int:
     ap.add_argument("--no-company", action="store_true")
     ap.add_argument("--set-kind", choices=["group", "community", "event"])
     ap.add_argument("--by", help="decide: who decided")
+    ap.add_argument("--monitored-only", action="store_true",
+                    help="propose: keep only communities that hold a group the operator monitors")
     a = ap.parse_args()
     if a.stage == "tag" and not (a.tag and a.name):
         sys.exit("tag needs --tag and --name")
