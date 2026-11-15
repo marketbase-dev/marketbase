@@ -113,6 +113,9 @@ jobs:
       - name: Identity helpers keep their meaning
         run: python3 scripts/check_identity_helpers.py --self-test
 
+      - name: Cache reads leave no open transaction
+        run: python3 tools/test_cache_read_releases_transaction.py
+
       - name: Install psycopg
         run: pip install --quiet "psycopg[binary]"
 
