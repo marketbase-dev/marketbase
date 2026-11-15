@@ -67,6 +67,16 @@ def derive_operator_fields(account: dict) -> dict:
             "channel_identifier": cp.get("username") or "",
             "email": cp.get("username"),
         }
+    if atype == "WHATSAPP":
+        # A WhatsApp account's only name is its number; --display-name names the person.
+        cp = account.get("connection_params", {}).get("im", {}) or {}
+        phone = (cp.get("phone_number") or account.get("name") or "").lstrip("+")
+        return {
+            "display_name": account.get("name") or "(unknown)",
+            "channel": "whatsapp",
+            "channel_identifier": f"+{phone}" if phone else "",
+            "email": None,
+        }
     sys.exit(f"Unsupported Unipile account type: {atype}")
 
 
@@ -134,6 +144,8 @@ def main() -> int:
                    help="HubSpot contact id for source-of-truth linking.")
     p.add_argument("--channel", default="linkedin",
                    help="Override channel; default auto-derived from Unipile account type.")
+    p.add_argument("--display-name", default=None,
+                   help="The person's name, when the account carries none (a WhatsApp account's name is its number).")
     p.add_argument("--list", action="store_true", help="List registered operators.")
     p.add_argument("--deactivate", action="store_true",
                    help="Mark the operator inactive (paused/disconnected).")
@@ -164,6 +176,8 @@ def main() -> int:
         fields = derive_operator_fields(account)
         fields["unipile_account_id"] = args.unipile_account_id
         fields["hubspot_contact_id"] = args.hubspot_contact_id
+        if args.display_name:
+            fields["display_name"] = args.display_name
         op_id = upsert_operator(conn, fields)
         print(f"Registered: {fields['display_name']} ({fields['channel']})  id={op_id}")
     return 0
