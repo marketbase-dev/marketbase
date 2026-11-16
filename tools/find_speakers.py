@@ -43,6 +43,7 @@ import html as htmllib
 import json
 import re
 import sys
+import time
 import unicodedata
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -61,7 +62,8 @@ SUBTYPES = ["conference", "podcast_episode", "meetup", "webinar"]
 UA = "Mozilla/5.0 (compatible; event-page-reader)"
 SEARCH_SHAPES = ['{term} conference {year}', '{term} summit {year}', '{term} event speakers {year}',
                  '{term} podcast', '{term} podcast guests']
-THIN = 800          # a page with less visible text than this is tried again through the reader
+NEAR = 200          # a title or company counts as a speaker's when the page prints it this close to the name
+THIN = 800         # a page with less visible text than this is tried again through the reader
 
 
 # ── text helpers ───────────────────────────────────────────────────────────────
@@ -181,6 +183,30 @@ def jsonld_speakers(page: dict) -> list[dict]:
     return out
 
 
+def on_page_only(people: list[dict], page: dict) -> tuple[list[dict], int]:
+    """Structured data can describe another event, or carry a title or employer the page never shows.
+    Keep a person only when the visible text names them, and a title or company only when the page prints
+    it next to their name (within NEAR characters): a site that stamps its own name on every speaker as
+    the employer does print that name somewhere, just not beside the person."""
+    hay = fold(page.get("text", ""))
+    kept = []
+    # one employer on every speaker is the site's own stamp, not a fact about each of them: better blank than wrong
+    stamped = {p.get("company") for p in people}
+    if len(people) > 1 and len(stamped) == 1:
+        for p in people:
+            p["company"] = None
+    for p in people:
+        name = fold(p.get("name") or "")
+        if not name or name not in hay:
+            continue
+        around = " ".join(hay[max(0, m.start() - NEAR):m.end() + NEAR] for m in re.finditer(re.escape(name), hay))
+        for k in ("title", "company"):
+            if p.get(k) and fold(str(p[k])) not in around:
+                p[k] = None
+        kept.append(p)
+    return kept, len(people) - len(kept)
+
+
 # ── events ─────────────────────────────────────────────────────────────────────
 def upsert_collective(cur, kind, name, provider_id, url, raw, starts=None, ends=None, location=None, parent=None) -> str:
     cur.execute("""
@@ -213,6 +239,11 @@ def stage_add_event(conn, a) -> int:
     if a.series_url:
         parent = upsert_collective(cur, "community", a.series_name or a.name, norm_url(a.series_url),
                                    norm_url(a.series_url), {"subtype": "series", "organiser": a.organiser})
+    elif a.series_name:
+        # no address for the series: key it inside the event's own site, so two sites never share one
+        site = urlsplit(norm_url(a.url)).netloc
+        parent = upsert_collective(cur, "community", a.series_name, f"{site}#series:{slug(a.series_name)}", None,
+                                   {"subtype": "series", "organiser": a.organiser, "keyed_by": "site and series name"})
     pid = norm_url(a.url) + (f"#{a.edition}" if a.edition else "")
     raw = {"subtype": a.kind, "edition": a.edition, "organiser": a.organiser, "topic_sets": sorted(set(a.topic_set or [])),
            "speakers_url": norm_url(a.speakers_url) if a.speakers_url else None, "page_read_via": page.get("via")}
@@ -233,15 +264,53 @@ def event_row(cur, event_id: str):
 
 
 def stage_page(conn, a) -> int:
-    print(read_page(conn, a.url, a.refresh).get("text", ""))
+    page = read_page(conn, a.url, a.refresh)
+    print(page.get("text", ""))
+    # some hosts (Luma) keep the date and place out of the visible text and only in the page's structured data
+    for f in jsonld_event_facts(page):
+        print("\n[stated in the page's structured data] " + json.dumps(f, ensure_ascii=False))
     return 0
+
+
+def jsonld_event_facts(page: dict) -> list[dict]:
+    out = []
+
+    def walk(node):
+        if isinstance(node, list):
+            for n in node:
+                walk(n)
+        elif isinstance(node, dict):
+            kind = node.get("@type")
+            if "Event" in str(kind) and node.get("startDate"):
+                loc = node.get("location")
+                loc = loc[0] if isinstance(loc, list) and loc else loc
+                place = loc.get("name") or loc.get("@type") if isinstance(loc, dict) else loc
+                out.append({k: v for k, v in {"name": node.get("name"), "starts": node.get("startDate"),
+                                              "ends": node.get("endDate"), "place": place}.items() if v})
+            for v in node.values():
+                walk(v)
+
+    for block in re.findall(r'(?is)<script[^>]+application/ld\+json[^>]*>(.*?)</script>', page.get("html") or ""):
+        try:
+            walk(json.loads(block))
+        except ValueError:
+            continue
+    return out
 
 
 def stage_extract(conn, a) -> int:
     cur = conn.cursor()
     _, name, url, raw = event_row(cur, a.event)
     page = read_page(conn, (raw or {}).get("speakers_url") or url, a.refresh)
-    found = sessionize_speakers(conn, page) or jsonld_speakers(page)
+    found = sessionize_speakers(conn, page)
+    if not found:
+        found, dropped = on_page_only(jsonld_speakers(page), page)
+        if dropped:
+            print(f"  ! {dropped} people in the page's structured data are not in its visible text; left out",
+                  file=sys.stderr)
+        if found:
+            print("  ! read from the page's structured data, which often lists fewer people than the page: "
+                  "compare with the page text (stage `page`) before recording", file=sys.stderr)
     print(f"  {name}: {len(found)} speakers readable without help"
           + ("" if found else "; read the page text (stage `page`) and pass the speakers to record-speakers"),
           file=sys.stderr)
@@ -272,6 +341,8 @@ def stage_record_speakers(conn, a) -> int:
         role = p.get("role") or "speaker"
         if not name or role not in ROLES:
             refused.append((name or "(no name)", f"role {role!r}" if name else "no name"))
+        elif len(fold(name).split()) < 2:
+            refused.append((name, "a single name is not enough to file a person"))
         elif fold(name) not in hay and fold(name) not in feed_names:
             refused.append((name, "name is not on a cached page of this event"))
         else:
@@ -437,6 +508,22 @@ def stage_report(conn, a) -> int:
     return 0
 
 
+def connect_patiently(client: str):
+    """The key store sometimes fails a read when many runs start at once, and reports it as "no such
+    instance". Try again twice, forgetting the failed answer, before believing it."""
+    for wait in (3, 8, None):
+        try:
+            return connect(client)
+        except SystemExit:
+            if wait is None:
+                raise
+            cache = getattr(sys.modules.get("secret_store"), "_cache", None)
+            if isinstance(cache, dict):
+                cache.clear()
+            print(f"  ! could not read the database key; trying again in {wait}s", file=sys.stderr)
+            time.sleep(wait)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("stage", choices=["policy", "set-policy", "plan", "record-search", "add-event", "page", "extract",
@@ -471,7 +558,7 @@ def main() -> int:
         sys.exit(f"{a.stage} needs {', '.join(missing)}")
     if a.stage == "set-policy":
         a.topic_set = a.topic_set[0]
-    conn = connect(a.client)
+    conn = connect_patiently(a.client)
     try:
         return {"policy": stage_policy, "set-policy": stage_set_policy, "plan": stage_plan,
                 "record-search": stage_record_search, "add-event": stage_add_event, "page": stage_page,
