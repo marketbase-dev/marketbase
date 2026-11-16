@@ -177,6 +177,10 @@ def main():
                          "they carry flag:in_active_hubspot_sequence (already enrolled in a "
                          "HubSpot Sales sequence). Off by default — we don't double-message "
                          "someone who's already in a live HubSpot sequence.")
+    ap.add_argument("--allow-in-touch", action="store_true",
+                    help="Bypass the personally-in-touch guard and stage leads an operator already "
+                         "talks to (v_leads_in_touch: a two-way direct chat or LinkedIn conversation, "
+                         "or a shared small group). Off by default.")
     ap.add_argument("--source", default="marketbase-stage-to-campaign",
                     help="last_status_source tag.")
     ap.add_argument("--notes")
@@ -305,6 +309,30 @@ def main():
                     if len(skipped_sequenced) > MAXSHOW:
                         print(f"     … and {len(skipped_sequenced) - MAXSHOW} more", flush=True)
 
+            # Personally-in-touch guard (schema 098). Someone an operator already talks to
+            # (a two-way direct chat or LinkedIn conversation, or a shared small group) is
+            # not sent automated outreach. Override with --allow-in-touch.
+            skipped_in_touch = []
+            if lead_ids and not args.allow_in_touch:
+                cur.execute("""
+                    SELECT t.lead_id, l.name, l.linkedin_url, array_to_string(t.reasons, ', ')
+                    FROM v_leads_in_touch t
+                    JOIN leads l ON l.id = t.lead_id
+                    WHERE t.lead_id = ANY(%s)
+                    ORDER BY l.name
+                """, (lead_ids,))
+                skipped_in_touch = cur.fetchall()
+                if skipped_in_touch:
+                    blocked_touch = {r[0] for r in skipped_in_touch}
+                    lead_ids = [lid for lid in lead_ids if lid not in blocked_touch]
+                    print(f"  ⛔ {len(skipped_in_touch)} lead(s) an operator is personally in touch "
+                          f"with — NOT staged (use --allow-in-touch to override):", flush=True)
+                    for _, name, url, why in skipped_in_touch[:50]:
+                        print(f"     • {name or '(no name)'}  {url or ''}  [{why}]", flush=True)
+                    if len(skipped_in_touch) > 50:
+                        print(f"     … and {len(skipped_in_touch) - 50} more "
+                              f"(full list: SELECT * FROM v_leads_in_touch)", flush=True)
+
             inserted = updated = unchanged = 0
             for lid in lead_ids:
                 if args.force_status:
@@ -345,6 +373,8 @@ def main():
         print(f"  withheld (in active HubSpot sequence): {len(skipped_sequenced)}")
     if skipped_deal:
         print(f"  withheld (employer has active/won deal): {len(skipped_deal)}")
+    if skipped_in_touch:
+        print(f"  withheld (an operator is personally in touch): {len(skipped_in_touch)}")
         print()
         print(f"  ⚠ {len(skipped_deal)} lead(s) were withheld because their employer "
               f"has an active or won deal in HubSpot.")

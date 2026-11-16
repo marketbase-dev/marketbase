@@ -25,6 +25,12 @@ changed since the last run lands in collective_membership_changes through the ta
                  replaces a decided link.
   decide         --id C --by WHO with --parent ID | --new-parent NAME | --no-parent, --company-id ID |
                  --no-company, --set-kind: one person's decision about one collective.
+  match          "maybe the same person": two different people on file with the same full name in
+                 the same community, group or event. Filed in lead_possible_matches with the name
+                 and the shared context as evidence. Nobody is merged on it; a pair turns `proven`
+                 by itself once an exact identifier joins the two.
+  daily          chats, join-requests, match, in that order (the run after a chat sync).
+                 With --all instead of --client: every instance.
   report         counts.
 
 People are matched on exact identities only (member id, number, e-mail, profile URL). Identities
@@ -43,11 +49,12 @@ import collections
 import json
 import re
 import sys
+import unicodedata
 import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect  # noqa: E402
+from lib import connect, discover_instances  # noqa: E402
 
 ME = "sync_collectives.py"
 BATCH = 500
@@ -485,6 +492,106 @@ def stage_decide(conn, a) -> int:
     return 0
 
 
+# ── "maybe the same person" ────────────────────────────────────────────────────
+MAX_SAME_NAME = 3      # more people than this with one name in one context: the name says nothing
+
+
+def full_name_key(name: str | None) -> str | None:
+    """A full name as a comparison key: the part before any | , ( / @, letters only, accents and
+    case folded. None unless at least two words of two letters or more remain."""
+    head = re.split(r"[|,(/@]", name or "")[0]
+    flat = "".join(ch for ch in unicodedata.normalize("NFKD", head) if not unicodedata.combining(ch)).casefold()
+    words = re.findall(r"[^\W\d_]{2,}", flat)
+    return " ".join(words) if len(words) >= 2 else None
+
+
+def stage_match(conn, a) -> int:
+    cur = conn.cursor()
+    n = collections.Counter()
+    # every membership that resolves to a person, with its context: the community, else the collective
+    cur.execute("""SELECT v.lead_id::text, l.name, r.id::text, r.name, r.kind, c.name
+                     FROM v_collective_members v
+                     JOIN collectives c ON c.id = v.collective_id
+                     JOIN collectives r ON r.id = COALESCE(c.parent_id, c.id)
+                     JOIN leads l ON l.id = v.lead_id AND l.merged_into IS NULL
+                    WHERE c.provider <> 'web' AND l.name IS NOT NULL""")
+    ctx: dict[tuple, dict[str, set]] = collections.defaultdict(lambda: collections.defaultdict(set))
+    shown, roots = {}, {}
+    for lead, name, root, root_name, root_kind, coll_name in cur.fetchall():
+        key = full_name_key(name)
+        if key:
+            ctx[(root, key)][lead].add(coll_name or "?")
+            shown[lead] = name
+            roots[root] = (root_name, root_kind)
+    pairs = {}
+    for (root, key), people in ctx.items():
+        if len(people) < 2:
+            continue
+        if len(people) > MAX_SAME_NAME:
+            n["names skipped (shared by too many people in one context)"] += 1
+            continue
+        ids = sorted(people)
+        for i, x in enumerate(ids):
+            for y in ids[i + 1:]:
+                pairs.setdefault((x, y), (root, key, people))    # first context found is the evidence
+    n["pairs found"] = len(pairs)
+
+    cur.execute("SELECT id::text, a_lead_id::text, b_lead_id::text FROM v_lead_possible_matches")
+    on_file = {frozenset((x, y)): pid for pid, x, y in cur.fetchall() if x and y and x != y}
+    seen = [on_file[frozenset(p)] for p in pairs if frozenset(p) in on_file]
+    new = [p for p in pairs if frozenset(p) not in on_file]
+    # two different public profile pages are two different people
+    cur.execute("""SELECT lead_id::text, value FROM lead_identities
+                    WHERE kind = 'linkedin_url' AND value !~* '/in/ACoA' AND lead_id::text = ANY(%s)""",
+                ([x for p in new for x in p],))
+    pages = collections.defaultdict(set)
+    for lead, value in cur.fetchall():
+        pages[lead].add(value)
+    ident = member_identity(cur, sorted({x for p in new for x in p}))
+    rows = []
+    for x, y in new:
+        if pages[x] and pages[y] and not pages[x] & pages[y]:
+            n["pairs dropped (two different LinkedIn pages)"] += 1
+            continue
+        if x not in ident or y not in ident:
+            n["pairs dropped (a person with no identity)"] += 1
+            continue
+        root, key, people = pairs[(x, y)]
+        root_name, root_kind = roots[root]
+        rows.append({"ak": ident[x][0], "av": ident[x][1], "bk": ident[y][0], "bv": ident[y][1],
+                     "basis": f"same_name_same_{root_kind}",
+                     "evidence": {"name": key, "names_shown": [shown[x], shown[y]], "context": root_name,
+                                  "context_id": root, "context_kind": root_kind,
+                                  "seen_in": [sorted(people[x]), sorted(people[y])],
+                                  "people_with_this_name": len(people)}})
+    for part in chunks(rows):
+        # the table wants the pair ordered; the database's own ordering decides which side is a
+        cur.execute("""
+            INSERT INTO lead_possible_matches (a_kind, a_value, b_kind, b_value, basis, evidence, source)
+            SELECT CASE WHEN f THEN r->>'ak' ELSE r->>'bk' END, CASE WHEN f THEN r->>'av' ELSE r->>'bv' END,
+                   CASE WHEN f THEN r->>'bk' ELSE r->>'ak' END, CASE WHEN f THEN r->>'bv' ELSE r->>'av' END,
+                   r->>'basis', r->'evidence', %s
+              FROM jsonb_array_elements(%s::jsonb) r,
+                   LATERAL (SELECT (r->>'ak', r->>'av') < (r->>'bk', r->>'bv') AS f) o
+            ON CONFLICT (a_kind, a_value, b_kind, b_value) DO UPDATE SET last_seen_at = now()""",
+                    (f"{ME} match", json.dumps(part, ensure_ascii=False)))
+        n["pairs filed"] += cur.rowcount
+        conn.commit()
+    for part in chunks(seen, 2000):
+        cur.execute("UPDATE lead_possible_matches SET last_seen_at = now() WHERE id::text = ANY(%s)", (part,))
+        n["pairs already on file, seen again"] += cur.rowcount
+        conn.commit()
+    cur.execute("SELECT state, count(*) FROM v_lead_possible_matches GROUP BY 1 ORDER BY 1")
+    print("match:", dict(n), "| on file now:", dict(cur.fetchall()))
+    return 0
+
+
+def stage_daily(conn, a) -> int:
+    for stage in (stage_chats, stage_join_requests, stage_match):
+        stage(conn, a)
+    return 0
+
+
 def stage_report(conn, a) -> int:
     cur = conn.cursor()
     cur.execute("""SELECT c.kind, c.provider, count(DISTINCT c.id), count(m.id), count(DISTINCT v.lead_id)
@@ -501,14 +608,24 @@ def stage_report(conn, a) -> int:
         print("  ", r)
     cur.execute("SELECT count(*) FROM v_collective_members WHERE lead_id IS NULL")
     print("memberships with no person:", cur.fetchone()[0])
+    cur.execute("SELECT state, count(*) FROM v_lead_possible_matches GROUP BY 1 ORDER BY 1")
+    print("maybe the same person, by state:", dict(cur.fetchall()))
+    cur.execute("SELECT to_regclass('v_lead_in_touch_reasons') IS NOT NULL")
+    if cur.fetchone()[0]:
+        cur.execute("SELECT basis, count(DISTINCT lead_id) FROM v_lead_in_touch_reasons GROUP BY 1 ORDER BY 1")
+        by = dict(cur.fetchall())
+        cur.execute("SELECT count(*) FROM v_leads_in_touch")
+        print("personally in touch:", cur.fetchone()[0], "people;", by)
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("stage", choices=["events", "chats", "join-requests", "tag", "retire-tag", "propose", "decide",
-                                      "report"])
-    ap.add_argument("--client", required=True)
+                                      "match", "daily", "report"])
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--client")
+    g.add_argument("--all", action="store_true", help="daily: every instance")
     ap.add_argument("--tag")
     ap.add_argument("--name")
     ap.add_argument("--kind", default="community", choices=["group", "community", "event"])
@@ -532,9 +649,25 @@ def main() -> int:
         sys.exit("retire-tag needs --tag and --message")
     if a.stage == "decide" and not (a.id and a.by):
         sys.exit("decide needs --id and --by")
+    if a.all and a.stage != "daily":
+        sys.exit("--all goes with daily only")
+    if a.all:
+        failed = 0
+        for client in discover_instances():
+            print(f"== {client}", flush=True)
+            conn = connect(client)
+            try:
+                stage_daily(conn, a)
+            except Exception as e:  # noqa: BLE001  one instance's failure must not stop the others
+                conn.rollback()
+                failed += 1
+                print(f"FAILED {client}: {type(e).__name__}: {e}", flush=True)
+            finally:
+                conn.close()
+        return 1 if failed else 0
     conn = connect(a.client)
     try:
-        return {"propose": stage_propose, "decide": stage_decide, "events": stage_events, "chats": stage_chats, "join-requests": stage_join_requests,
+        return {"match": stage_match, "daily": stage_daily, "propose": stage_propose, "decide": stage_decide, "events": stage_events, "chats": stage_chats, "join-requests": stage_join_requests,
                 "tag": stage_tag, "retire-tag": stage_retire_tag, "report": stage_report}[a.stage](conn, a)
     finally:
         conn.close()
