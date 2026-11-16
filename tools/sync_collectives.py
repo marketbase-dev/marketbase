@@ -610,14 +610,11 @@ def stage_report(conn, a) -> int:
     print("memberships with no person:", cur.fetchone()[0])
     cur.execute("SELECT state, count(*) FROM v_lead_possible_matches GROUP BY 1 ORDER BY 1")
     print("maybe the same person, by state:", dict(cur.fetchall()))
-    cur.execute("SELECT to_regclass('v_lead_in_touch_reasons') IS NOT NULL")
+    cur.execute("SELECT to_regclass('v_lead_small_group_ties') IS NOT NULL")
     if cur.fetchone()[0]:
-        cur.execute("SELECT basis, count(DISTINCT lead_id) FROM v_lead_in_touch_reasons GROUP BY 1 ORDER BY 1")
-        by = dict(cur.fetchall())
-        cur.execute("SELECT count(*) FROM v_leads_in_touch")
-        print("personally in touch:", cur.fetchone()[0], "people;", by)
+        cur.execute("SELECT count(DISTINCT lead_id), count(DISTINCT collective_id) FROM v_lead_small_group_ties")
+        print("people sharing a small group with an operator, groups:", cur.fetchone())
     return 0
-
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
