@@ -23,6 +23,9 @@ changed since the last run lands in collective_membership_changes through the ta
   propose        propose communities: a community a network reports as two same-name groups, and
                  collectives whose names start with the same two words. Marked `inferred`; never
                  replaces a decided link.
+  member         --id C --person URL --role R --by WHO [--application A] [--source-status TEXT]:
+                 one person added to one event or group by hand (a speaker someone nominated, a guest
+                 invited by message). The person must be on file; found by LinkedIn URL only.
   decide         --id C --by WHO with --parent ID | --new-parent NAME | --no-parent, --company-id ID |
                  --no-company, --set-kind: one person's decision about one collective.
   match          "maybe the same person": two different people on file with the same full name in
@@ -54,7 +57,7 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import connect, discover_instances  # noqa: E402
+from lib import connect, discover_instances, lead_id_for_linkedin_url, normalize_linkedin_url  # noqa: E402
 
 ME = "sync_collectives.py"
 BATCH = 500
@@ -592,6 +595,36 @@ def stage_daily(conn, a) -> int:
     return 0
 
 
+def stage_member(conn, a) -> int:
+    """One person's place in one collective, as someone stated it. Keyed by id; asserted."""
+    cur = conn.cursor()
+    cur.execute("SELECT name, kind FROM collectives WHERE id = %s", (a.id,))
+    row = cur.fetchone()
+    if not row:
+        sys.exit(f"no collective {a.id}")
+    url = normalize_linkedin_url(a.person)
+    lead = lead_id_for_linkedin_url(cur, url) if url else None
+    if not lead:
+        sys.exit(f"nobody on file for {a.person}")
+    cur.execute("SELECT COALESCE(merged_into, id)::text FROM leads WHERE id = %s", (lead,))
+    lead = cur.fetchone()[0]
+    kind, value = existing_keys(cur).get((a.id, lead)) or member_identity(cur, [lead]).get(lead, (None, None))
+    if not kind:
+        sys.exit(f"{url}: no identity on file")
+    upsert_memberships(cur, [dict(collective_id=a.id, kind=kind, value=value, role=a.role, application=a.application,
+                                  source_status=a.source_status, source=a.by, source_ref="manual")])
+    cur.execute("""SELECT role, application, source_status FROM v_collective_members
+                    WHERE collective_id = %s AND lead_id = %s""", (a.id, lead))
+    got = cur.fetchall()
+    want = (a.role, a.application, a.source_status)
+    if len(got) != 1 or any(w is not None and g != w for g, w in zip(got[0], want)):
+        conn.rollback()
+        sys.exit(f"rolled back: {row[0]!r} reads {got}, expected {want}")
+    conn.commit()
+    print(f"member ({a.by}): {url} in {row[0]!r} as {a.role}" + (f", {a.application}" if a.application else ""))
+    return 0
+
+
 def stage_report(conn, a) -> int:
     cur = conn.cursor()
     cur.execute("""SELECT c.kind, c.provider, count(DISTINCT c.id), count(m.id), count(DISTINCT v.lead_id)
@@ -619,7 +652,7 @@ def stage_report(conn, a) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("stage", choices=["events", "chats", "join-requests", "tag", "retire-tag", "propose", "decide",
-                                      "match", "daily", "report"])
+                                      "match", "daily", "member", "report"])
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--client")
     g.add_argument("--all", action="store_true", help="daily: every instance")
@@ -636,7 +669,12 @@ def main() -> int:
     ap.add_argument("--company-id", help="decide: the company behind it")
     ap.add_argument("--no-company", action="store_true")
     ap.add_argument("--set-kind", choices=["group", "community", "event"])
-    ap.add_argument("--by", help="decide: who decided")
+    ap.add_argument("--by", help="decide, member: who decided or said so")
+    ap.add_argument("--person", help="member: LinkedIn URL")
+    ap.add_argument("--role", choices=["member", "admin", "host", "guest", "speaker"], help="member")
+    ap.add_argument("--application", choices=["nominated", "invited", "applied", "approved", "declined", "waitlisted"],
+                    help="member")
+    ap.add_argument("--source-status", help="member: the words used, e.g. couldn't make it")
     ap.add_argument("--monitored-only", action="store_true",
                     help="propose: keep only communities that hold a group the operator monitors")
     a = ap.parse_args()
@@ -644,6 +682,8 @@ def main() -> int:
         sys.exit("tag needs --tag and --name")
     if a.stage == "retire-tag" and not (a.tag and a.message):
         sys.exit("retire-tag needs --tag and --message")
+    if a.stage == "member" and not (a.id and a.person and a.role and a.by):
+        sys.exit("member needs --id, --person, --role and --by")
     if a.stage == "decide" and not (a.id and a.by):
         sys.exit("decide needs --id and --by")
     if a.all and a.stage != "daily":
@@ -664,7 +704,7 @@ def main() -> int:
         return 1 if failed else 0
     conn = connect(a.client)
     try:
-        return {"match": stage_match, "daily": stage_daily, "propose": stage_propose, "decide": stage_decide, "events": stage_events, "chats": stage_chats, "join-requests": stage_join_requests,
+        return {"member": stage_member, "match": stage_match, "daily": stage_daily, "propose": stage_propose, "decide": stage_decide, "events": stage_events, "chats": stage_chats, "join-requests": stage_join_requests,
                 "tag": stage_tag, "retire-tag": stage_retire_tag, "report": stage_report}[a.stage](conn, a)
     finally:
         conn.close()
