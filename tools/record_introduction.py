@@ -8,8 +8,12 @@
          who is not on file is refused, unless --create: then a person is added with the URL alone
          and a manual_add source naming this tool, for an enrichment run to fill in.
          Recording the same introduction again writes nothing.
+  amend  --client X --id ID [--for-collective ID] [--purpose TEXT] [--to-operator NAME]
+         [--on YYYY-MM-DD] [--note TEXT] --source WHO
+         Corrects one recorded introduction, by the id `list` prints. Only the fields given change;
+         the row as it was is printed first. --source names who gave the correction.
   list   --client X [--person URL]
-         Introductions made by, about or to one person, or all of them.
+         Introductions made by, about or to one person, or all of them, each with its id.
 
 People are stored by an identity (their LinkedIn URL when it is on file), so a later merge of
 either person keeps the row pointing at the right one.
@@ -101,6 +105,49 @@ def cmd_add(conn, a) -> int:
     return 0
 
 
+AMENDABLE = ("for_collective_id", "purpose", "to_operator", "happened_on", "note")
+
+
+def cmd_amend(conn, a) -> int:
+    cur = conn.cursor()
+    change = {k: v for k, v in (("for_collective_id", a.for_collective), ("purpose", a.purpose),
+                                ("to_operator", a.to_operator), ("happened_on", a.on), ("note", a.note)) if v}
+    if not change:
+        sys.exit("nothing to change: give at least one of --for-collective, --purpose, --to-operator, --on, --note")
+    cur.execute(f"SELECT {', '.join(AMENDABLE)}, source FROM lead_introductions WHERE id = %s", (a.id,))
+    before = cur.fetchone()
+    if not before:
+        sys.exit(f"no introduction {a.id}")
+    if a.to_operator:
+        cur.execute("SELECT count(*) FROM outbound_operators WHERE display_name = %s", (a.to_operator,))
+        if not cur.fetchone()[0]:
+            sys.exit(f"no operator named {a.to_operator!r}")
+    if a.for_collective:
+        cur.execute("SELECT name FROM collectives WHERE id = %s", (a.for_collective,))
+        if not cur.fetchone():
+            sys.exit(f"no collective {a.for_collective}")
+    print("  was: " + ", ".join(f"{k}={v}" for k, v in zip(AMENDABLE + ("source",), before) if v is not None))
+    change["source"] = a.source
+    try:
+        cur.execute(f"UPDATE lead_introductions SET {', '.join(f'{k} = %s' for k in change)} WHERE id = %s",
+                    (*change.values(), a.id))
+    except Exception as e:  # the unique key or a check constraint: another row already says this, or the shape is wrong
+        conn.rollback()
+        sys.exit(f"not changed: {str(e).splitlines()[0]}")
+    if cur.rowcount != 1:
+        conn.rollback()
+        sys.exit(f"rolled back: expected 1 row, got {cur.rowcount}")
+    # invariant, inside the transaction: the row reads back through the view with every field as given
+    cur.execute(f"SELECT {', '.join(change)} FROM v_lead_introductions WHERE id = %s", (a.id,))
+    got = cur.fetchone()
+    if not got or [str(v) for v in got] != [str(v) for v in change.values()]:
+        conn.rollback()
+        sys.exit(f"rolled back: the row does not read back as given ({got})")
+    conn.commit()
+    print("  now: " + ", ".join(f"{k}={v}" for k, v in change.items()))
+    return 0
+
+
 def cmd_list(conn, a) -> int:
     cur = conn.cursor()
     where, args = "", []
@@ -109,12 +156,12 @@ def cmd_list(conn, a) -> int:
         if not lead:
             sys.exit(f"nobody on file for {a.person}")
         where, args = "WHERE %s IN (by_lead_id, whom_lead_id, to_lead_id)", [lead]
-    cur.execute(f"""SELECT kind, by_name, whom_name, to_name, for_collective, purpose, happened_on, source
+    cur.execute(f"""SELECT id::text, kind, by_name, whom_name, to_name, for_collective, purpose, happened_on, source
                       FROM v_lead_introductions {where} ORDER BY recorded_at""", args)
     rows = cur.fetchall()
-    for kind, by, whom, to, coll, purpose, on, source in rows:
+    for iid, kind, by, whom, to, coll, purpose, on, source in rows:
         print(f"  {by or '?'} {kind} {whom or '?'}" + (f" to {to}" if to else "") + (f" for {purpose}" if purpose else "")
-              + (f" ({coll})" if coll else "") + (f" on {on}" if on else "") + f"  [{source}]")
+              + (f" ({coll})" if coll else "") + (f" on {on}" if on else "") + f"  [{source}]  id {iid}")
     print(f"{len(rows)} introduction(s)")
     return 0
 
@@ -136,13 +183,22 @@ def main() -> int:
     s.add_argument("--source", required=True, help="who reported it, and where")
     s.add_argument("--note")
     s.add_argument("--create", action="store_true", help="add a person who is not on file")
+    s = sub.add_parser("amend")
+    s.add_argument("--client", required=True)
+    s.add_argument("--id", required=True, help="the introduction's id, as `list` prints it")
+    s.add_argument("--for-collective", help="id of the event or group it was for")
+    s.add_argument("--purpose")
+    s.add_argument("--to-operator", help="display name of the operator they were introduced to")
+    s.add_argument("--on", help="the date it happened, YYYY-MM-DD")
+    s.add_argument("--note")
+    s.add_argument("--source", required=True, help="who gave the correction, and where")
     s = sub.add_parser("list")
     s.add_argument("--client", required=True)
     s.add_argument("--person", help="LinkedIn URL")
     a = ap.parse_args()
     conn = connect(a.client)
     try:
-        return {"add": cmd_add, "list": cmd_list}[a.cmd](conn, a)
+        return {"add": cmd_add, "amend": cmd_amend, "list": cmd_list}[a.cmd](conn, a)
     finally:
         conn.close()
 
