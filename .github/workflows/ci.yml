@@ -181,3 +181,11 @@ jobs:
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_merge_lead.py
+
+      # A new processor version replaces the one before it (superseded_by), and
+      # the repair tool fixes rows saved before the shared helper did that.
+      - name: Processor versions supersede and repair
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          pip install --quiet pyyaml
+          python3 scripts/check_processor_versions.py
