@@ -488,8 +488,13 @@ def upsert_company_from_qualification(cur, full_result: dict) -> str:
     return str(cur.fetchone()[0])
 
 
-def register_processor_from_yaml(client: str, yaml_text: str, *, created_by: str | None = None) -> tuple[str, str, str]:
+def register_processor_from_yaml(client: str, yaml_text: str, *, created_by: str | None = None,
+                                 supersede: bool = True) -> tuple[str, str, str]:
     """UPSERT a processor row in the client's marketbase from a YAML spec.
+
+    A NEW version marks the earlier versions of the same name replaced
+    (`superseded_by`), as register_processor.py does. Pass supersede=False to
+    keep them current. Re-registering an existing version changes no marker.
 
     Returns (name, version, action) where action is 'inserted' or 'updated'.
 
@@ -546,13 +551,38 @@ def register_processor_from_yaml(client: str, yaml_text: str, *, created_by: str
                       (name, version, processor_type, description, yaml_spec,
                        inputs, outputs, rule_changes, created_by)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
                 """, (name, version, processor_type, description, yaml_text,
                       _Jsonb(inputs) if inputs is not None else None,
                       _Jsonb(outputs) if outputs is not None else None,
                       rule_changes, created_by))
+                new_id = cur.fetchone()[0]
                 action = 'inserted'
+                if supersede:
+                    _supersede_prior_versions(cur, name, new_id)
         conn.commit()
     return (name, version, action)
+
+
+def _supersede_prior_versions(cur, name: str, new_id) -> int:
+    """Point every version of `name` that is still marked current at `new_id`.
+
+    A new version replaces the ones before it. register_processor.py always
+    did this; register_processor_from_yaml did not, so every version saved
+    through it stayed "current" and any list of current processors was wrong.
+    The rows are resolved to ids first and written by id, and the count is
+    checked."""
+    cur.execute("SELECT id FROM processors WHERE name = %s AND id <> %s AND superseded_by IS NULL",
+                (name, new_id))
+    prior = [r[0] for r in cur.fetchall()]
+    if not prior:
+        return 0
+    cur.execute("UPDATE processors SET superseded_by = %s WHERE id = ANY(%s) AND superseded_by IS NULL",
+                (new_id, prior))
+    if cur.rowcount != len(prior):
+        raise RuntimeError(f"expected to mark {len(prior)} prior version(s) of {name!r} replaced, "
+                           f"marked {cur.rowcount}")
+    return len(prior)
 
 
 # Backwards-compat alias for callers that haven't migrated yet
