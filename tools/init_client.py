@@ -6,10 +6,14 @@ Steps:
   2. Check if a project named `marketbase-<client>` already exists.
      - If yes, reuse it (skill is idempotent).
      - If no, create it.
-  3. Fetch the project's primary branch + connection URI.
-  4. Write `~/.env.<ClientName>` with `GTM_DB_CONNSTRING=...`.
-     (chmod 600 because secrets.)
-  5. Apply all schema migrations in order.
+  3. Find or create the client's own Infisical project (named exactly
+     `<ClientName>`) and register it as a scope in
+     `~/.claude/tools/infisical_credentials.json`.
+  4. Store the connection URI there as `MARKETBASE_DB_CONNSTRING`. Nothing is
+     written to `~/.env.<ClientName>`; a line left there by an older run is
+     moved into the vault and removed from the file.
+  5. Stamp a brand-new, empty database with its `db_identity` row.
+  6. Apply all schema migrations in order.
 
 Usage:
   python3 init_client.py <ClientName>          # e.g. Acme
@@ -24,10 +28,15 @@ import json
 import os
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib import env_path, apply_schema, MIGRATIONS
+from lib import (env_path, apply_schema, connect, infisical_instance,
+                 DB_KEY, INFISICAL_MAP, MIGRATIONS)
+
+# The vault environment every scope in infisical_credentials.json uses.
+INFISICAL_ENV = "dev"
 
 ORG_ID_DEFAULT = "<your-neon-org-id>"   # Impact 11
 
@@ -82,20 +91,172 @@ def get_connection_uri(project_id: str) -> str:
     return res.strip() if isinstance(res, str) else json.dumps(res)
 
 
-def write_env_file(client: str, conn_url: str):
+def run_infisical(*args, timeout: int = 60) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(["infisical", *args], capture_output=True, text=True,
+                              timeout=timeout)
+    except FileNotFoundError:
+        sys.exit("the `infisical` CLI is not installed. The connection string is stored "
+                 "in Infisical only; there is no env-file fallback.")
+    except subprocess.TimeoutExpired:
+        sys.exit(f"infisical {args[0]} timed out. Nothing was stored; re-run when it answers.")
+
+
+def ensure_vault_project(client: str) -> dict:
+    """The client's scope in infisical_credentials.json, creating the Infisical
+    project and the scope when missing. Holding MARKETBASE_DB_CONNSTRING in its
+    own project is what makes a client a MarketBase instance (lib.discover_instances),
+    so an instance whose secret sits anywhere else is invisible to every
+    all-instance job, migrations included."""
+    inst = infisical_instance(client)
+    if inst:
+        print(f"  ✓ Infisical scope exists: {inst.get('projectName')} ({inst['projectId'][:8]}…)",
+              flush=True)
+        return inst
+
+    r = run_infisical("sm", "projects", "list", "-o", "json", "--silent")
+    if r.returncode != 0:
+        sys.exit(f"could not list Infisical projects (are you logged in? `infisical login`):\n"
+                 f"{r.stderr.strip()[-400:]}")
+    projects = json.loads(r.stdout)
+    if isinstance(projects, dict):
+        projects = projects.get("projects") or []
+    same = [p for p in projects if (p.get("name") or "") == client]
+    if len(same) > 1:
+        sys.exit(f"{len(same)} Infisical projects are named {client!r} "
+                 f"({', '.join(p['id'][:8] + '…' for p in same)}). Add the right one to "
+                 f"{INFISICAL_MAP} by hand; this script will not guess.")
+    if same:
+        proj = same[0]
+        print(f"  ✓ Existing Infisical project found: {proj['id'][:8]}…", flush=True)
+    else:
+        r = run_infisical("sm", "projects", "create", "--name", client, "--description",
+                          f"{client} MarketBase instance ({DB_KEY}). "
+                          f"Created by init_client.py on {date.today()}.",
+                          "-o", "json", "--silent")
+        if r.returncode != 0:
+            sys.exit(f"could not create the Infisical project {client!r}:\n"
+                     f"{(r.stderr or r.stdout).strip()[-400:]}")
+        out = json.loads(r.stdout)
+        proj = out.get("project", out)
+        print(f"  ✓ Created Infisical project: {proj['id'][:8]}…", flush=True)
+
+    inst = {"projectId": proj["id"], "projectName": proj.get("name") or client,
+            "env": INFISICAL_ENV,
+            "note": f"{client}'s MarketBase instance ({DB_KEY}). "
+                    f"Registered by init_client.py on {date.today()}."}
+    raw = INFISICAL_MAP.read_text()
+    cfg = json.loads(raw)
+    cfg.setdefault("scopes", {})[client] = inst
+    # One-space indent and the same trailing newline: the file's own format, so
+    # the diff is the new scope and nothing else.
+    INFISICAL_MAP.write_text(json.dumps(cfg, indent=1, ensure_ascii=False)
+                             + ("\n" if raw.endswith("\n") else ""))
+    print(f"  ✓ Registered scope {client!r} in {INFISICAL_MAP.name}", flush=True)
+    return inst
+
+
+def vault_get(inst: dict) -> str | None:
+    r = run_infisical("secrets", "get", DB_KEY, "--projectId", inst["projectId"],
+                      "--env", inst.get("env", INFISICAL_ENV), "--plain", "--silent")
+    return (r.stdout.strip() or None) if r.returncode == 0 else None
+
+
+def vault_set(client: str, inst: dict, conn_url: str) -> None:
+    """Store the connection string, then read it back: a set that did not land
+    must stop the run here, not surface later as "not a MarketBase instance"."""
+    r = run_infisical("secrets", "set", f"{DB_KEY}={conn_url}",
+                      "--projectId", inst["projectId"],
+                      "--env", inst.get("env", INFISICAL_ENV),
+                      "--type", "shared", "--silent")
+    if r.returncode != 0:
+        sys.exit("could not store the connection string in Infisical:\n"
+                 + (r.stderr or "").replace(conn_url, "<connection string>").strip()[-400:])
+    if vault_get(inst) != conn_url:
+        sys.exit("Infisical does not return the connection string that was just stored. "
+                 "Nothing else was changed.")
+    # secret_store caches a miss for the life of the process.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import secret_store
+    secret_store._cache.pop(("scoped:" + client, DB_KEY), None)
+
+
+def env_file_url(client: str) -> str | None:
+    """A connection string an older run of this script left in ~/.env.<Client>."""
     p = env_path(client)
-    key = "GTM_DB_CONNSTRING"
-    legacy_key = f"{client.upper()}_DATABASE_URL"
-    lines = []
-    if p.exists():
-        for ln in p.read_text().splitlines():
-            s = ln.strip()
-            if s.startswith(f"{key}=") or s.startswith(f"{legacy_key}="):
-                continue
-            lines.append(ln)
-    lines.append(f'{key}={conn_url}')
-    p.write_text("\n".join(lines) + "\n")
-    os.chmod(p, 0o600)
+    if not p.exists():
+        return None
+    for ln in p.read_text().splitlines():
+        s = ln.strip()
+        if s.startswith(f"{DB_KEY}="):
+            return s.split("=", 1)[1].strip().strip('"').strip("'") or None
+    return None
+
+
+def drop_env_line(client: str) -> None:
+    """Remove the connection-string line from ~/.env.<Client>, and the file with
+    it when nothing else is left. Only called once the vault holds the same value."""
+    p = env_path(client)
+    keep = [ln for ln in p.read_text().splitlines()
+            if not ln.strip().startswith(f"{DB_KEY}=")]
+    if any(ln.strip() and not ln.strip().startswith("#") for ln in keep):
+        p.write_text("\n".join(keep) + "\n")
+        os.chmod(p, 0o600)
+        print(f"  ✓ Removed {DB_KEY} from {p} (other keys kept)", flush=True)
+    else:
+        p.unlink()
+        print(f"  ✓ Deleted {p} (it held nothing else)", flush=True)
+
+
+def store_connection_string(client: str, project_id: str, fresh_uri: str = "") -> None:
+    inst = ensure_vault_project(client)
+    stored = vault_get(inst)
+    legacy = env_file_url(client)
+    if stored:
+        print(f"  ✓ Infisical already holds {DB_KEY}", flush=True)
+        if legacy and legacy != stored:
+            # The vault is read first, so the file's copy is unused. Which one is
+            # right is not this script's call.
+            print(f"  ! {env_path(client)} holds a DIFFERENT {DB_KEY}. The vault's is the one "
+                  f"in use; the file is left alone. Remove the stale one by hand.", flush=True)
+            return
+    else:
+        conn_url = legacy or fresh_uri or get_connection_uri(project_id)
+        vault_set(client, inst, conn_url)
+        print(f"  ✓ Stored {DB_KEY} in Infisical project {inst.get('projectName')!r}"
+              + ("  (moved from the env file)" if legacy else ""), flush=True)
+    if legacy:
+        drop_env_line(client)
+
+
+def ensure_identity(client: str, project_id: str) -> None:
+    """Stamp db_identity on a brand-new database. connect() refuses an unstamped
+    one, so without this the first apply_schema of a new instance cannot run.
+    Only an EMPTY database is stamped: an unstamped database that already has
+    tables may be a clone of another instance, and saying which one it is stays
+    a deliberate act (stamp_db_identity.py)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from db_identity import read_identity, stamp
+    conn = connect(client, _skip_identity=True)
+    try:
+        ident = read_identity(conn)
+        if ident:
+            print(f"  ✓ Database identity: {ident['instance']!r}/{ident['track']}", flush=True)
+            return
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM information_schema.tables "
+                        "WHERE table_schema = 'public'")
+            n_tables = cur.fetchone()[0]
+        conn.rollback()
+        if n_tables:
+            sys.exit(f"{client}: the database has {n_tables} table(s) and no db_identity row, so "
+                     f"it is not a new instance. If it really is {client!r}, stamp it yourself:\n"
+                     f"  python3 ~/.claude/tools/stamp_db_identity.py --client {client!r}")
+        stamp(conn, client, "marketbase",
+              note=f"Created by init_client.py on {date.today()} (Neon {project_id})")
+        print(f"  ✓ Stamped the new database as {client!r}/marketbase", flush=True)
+    finally:
+        conn.close()
 
 
 def main():
@@ -115,6 +276,7 @@ def main():
 
     # 1. Find or create the Neon project
     proj = find_project(candidate_names, args.org_id)
+    fresh_uri = ""
     if proj:
         print(f"  ✓ Existing Neon project found: {proj.get('id')} ({proj.get('name')!r})",
               flush=True)
@@ -123,24 +285,20 @@ def main():
         res = create_project(canonical_name, args.org_id, args.region)
         proj = res.get("project") or res
         print(f"  ✓ Created project: {proj.get('id')}", flush=True)
-        # New project: extract connection_uris if available
-        conn_uri = ""
         for c in (res.get("connection_uris") or []):
             if c.get("connection_uri"):
-                conn_uri = c["connection_uri"]; break
-        if conn_uri:
-            write_env_file(client, conn_uri)
-            print(f"  ✓ Wrote {env_path(client)}", flush=True)
+                fresh_uri = c["connection_uri"]; break
 
-    # 2. Always make sure ~/.env.<Client> has a fresh connection URL
-    if not env_path(client).exists():
-        conn_uri = get_connection_uri(proj["id"])
-        write_env_file(client, conn_uri)
-        print(f"  ✓ Wrote {env_path(client)}", flush=True)
-    else:
-        print(f"  ✓ env file exists: {env_path(client)}", flush=True)
+    # 2. The connection string lives in the client's own Infisical project, never
+    #    in ~/.env.<Client>. An instance whose secret is only in an env file is
+    #    skipped by migrate_all_clients and every other all-instance job, so it
+    #    silently falls behind on migrations.
+    store_connection_string(client, proj["id"], fresh_uri)
 
-    # 3. Apply schema migrations
+    # 3. A new database needs its identity row before anything may connect
+    ensure_identity(client, proj["id"])
+
+    # 4. Apply schema migrations
     print(f"  Checking {len(MIGRATIONS)} schema migration(s)…", flush=True)
     result = apply_schema(client)
     for fn in result["applied"]:
@@ -150,7 +308,7 @@ def main():
 
     print(f"\n✓ marketbase-{client.lower()} is ready.")
     print(f"  Project ID: {proj.get('id')}")
-    print(f"  Conn URL:   stored in ~/.env.{client}  (GTM_DB_CONNSTRING)")
+    print(f"  Conn URL:   stored in Infisical project {client!r}  ({DB_KEY})")
     print(f"\nNext: marketbase-upload-leads to start importing your data.")
 
 
