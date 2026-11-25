@@ -1,0 +1,14 @@
+{
+  "name": "marketbase",
+  "version": "0.1.1",
+  "description": "Your entire GTM context, in one place. Bootstrap a MarketBase database, source and qualify leads with full provenance, and stage them into campaigns.",
+  "author": {
+    "name": "MarketBase",
+    "url": "https://github.com/marketbase-dev"
+  },
+  "homepage": "https://marketbase.dev",
+  "repository": "https://github.com/marketbase-dev/marketbase",
+  "license": "BUSL-1.1",
+  "skills": "./skills/",
+  "requires_local_executor": true
+}

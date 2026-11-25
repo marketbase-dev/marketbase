@@ -1,7 +1,7 @@
 {
   "name": "marketbase",
   "displayName": "MarketBase",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Your entire GTM context, in one place. Bootstrap a MarketBase database, source and qualify leads with full provenance, and stage them into campaigns.",
   "author": {
     "name": "MarketBase",

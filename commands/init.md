@@ -21,16 +21,19 @@ If none resolve, ask the user which they want. Never guess a connection string.
 
 ## Apply migrations
 
+Run from the plugin/repository root. Install `psycopg[binary]` in your Python
+environment if neither psycopg nor psycopg2 is available.
+
 ```bash
-psql "$MARKETBASE_URL" -f schema/000_bootstrap.sql
-for f in schema/0*.sql; do
-  psql "$MARKETBASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break
-done
+python3 tools/apply_schema.py
+# Or select a registered instance:
+python3 tools/apply_schema.py --instance <name>
 ```
 
-`000_bootstrap.sql` creates the `schema_migrations` tracking table. Every
-migration is guarded with `IF NOT EXISTS` and is safe to re-run, so this loop
-is idempotent.
+The runner records applied files in `schema_migrations`, skips completed
+migrations, and stops on errors. Use this tracked runner rather than replaying
+every SQL file manually. Inspect pending migrations before changing an
+existing instance.
 
 ## Verify
 

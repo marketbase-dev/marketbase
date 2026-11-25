@@ -10,7 +10,7 @@
       "name": "marketbase",
       "source": "./",
       "description": "Your entire GTM context, in one place.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "license": "BUSL-1.1",
       "homepage": "https://marketbase.dev",
       "keywords": [

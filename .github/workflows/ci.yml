@@ -104,7 +104,7 @@ jobs:
 
       - name: Manifests are valid JSON
         run: |
-          python3 -c "import json;[json.load(open(f)) for f in ['.claude-plugin/plugin.json','.claude-plugin/marketplace.json']]"
+          python3 -c "import json;[json.load(open(f)) for f in ['.claude-plugin/plugin.json','.claude-plugin/marketplace.json','.codex-plugin/plugin.json','.agents/plugins/marketplace.json']]"
 
       - name: Python parses
         run: |

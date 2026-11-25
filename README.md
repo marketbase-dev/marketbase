@@ -152,7 +152,48 @@ point of this project, and that applies to our own data too.
 
 Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Claude Code plugin
+## Agent installation
+
+MarketBase installs natively in **Claude Code** and **Codex**. Both use the
+same schema skill, workflow skill, SQL migrations, and Python tools. The plugin
+runs locally and needs access to your Postgres database; installation alone
+does not create a database or configure credentials.
+
+### Codex
+
+Run in your terminal with a Codex CLI that supports `codex plugin`:
+
+```bash
+codex plugin marketplace add marketbase-dev/marketbase
+codex plugin add marketbase@marketbase
+```
+
+Restart your Codex client or start a new chat after installation. Ask:
+
+```text
+Use the marketbase skill to list my instances.
+Use the marketbase skill to initialize my database.
+```
+
+The `.agents/plugins/marketplace.json` catalog exposes the repository root as
+the plugin; `.codex-plugin/plugin.json` declares its shared `skills/` directory.
+In desktop clients with local marketplace support, select the MarketBase
+marketplace in the Plugins Directory and install MarketBase there. This does
+not automatically publish the plugin in the public ChatGPT plugin directory;
+public distribution requires a separate OpenAI submission.
+
+To test unpublished changes from a checkout:
+
+```bash
+codex plugin marketplace add /absolute/path/to/marketbase
+codex plugin add marketbase@marketbase
+```
+
+If you previously installed standalone `marketbase` or `marketbase-schema`
+skills, remove those old copies after verifying the plugin works to avoid
+loading duplicate or stale instructions.
+
+### Claude Code
 
 This repository is also a [Claude Code](https://claude.com/claude-code) plugin,
 so you can drive MarketBase conversationally.
@@ -172,15 +213,18 @@ Once installed:
 | `/marketbase:qualify` | Run a versioned qualifier over a cohort |
 | `/marketbase:stage` | Stage qualified leads into a campaign |
 
-The plugin also ships a `marketbase-schema` skill that teaches Claude the schema
-and its conventions, and a `qualifier` subagent for running classification at
-scale with per-batch durability.
+Both agents receive the `marketbase` workflow skill and `marketbase-schema`
+skill. Claude Code additionally receives a `qualifier` subagent for running
+classification at scale with per-batch durability. Codex runs that workflow
+directly; Claude agent declarations are not registered as Codex agents.
 
 ## Project layout
 
 ```
 marketbase/
-├── .claude-plugin/     Plugin + marketplace manifests
+├── .agents/plugins/   Codex marketplace catalog
+├── .codex-plugin/      Codex plugin manifest
+├── .claude-plugin/     Claude Code plugin + marketplace manifests
 ├── commands/           Claude Code slash commands
 ├── skills/             Claude Code skills
 ├── agents/             Claude Code subagents
