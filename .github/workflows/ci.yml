@@ -177,6 +177,14 @@ jobs:
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_voice_policy_functions.py
 
+      # 102: one door for what a company is to a client. Links name both
+      # companies, every fact is a separate claim with history, the old table
+      # follows during the transition, and withdrawing deletes nothing.
+      - name: Company relationship door behaves (102)
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          python3 scripts/check_company_relationship_door.py
+
       - name: Lead merge re-points, refuses, deletes nothing (080)
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
