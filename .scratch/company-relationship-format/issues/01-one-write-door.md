@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** built 2026-11-25 (schema/102, `scripts/check_company_relationship_door.py` 46/46 on a fresh database, ADR 0001); applying to the instances follows the merge.
+**Status:** done 2026-11-25 (#64). Applied to all seven instances; the check, run inside each instance and rolled back, passes 46/46 and no client row changed.
 
 **As built:**
 
@@ -19,5 +19,5 @@
 - [x] A check script on a fresh database: record, change scope, decisions, stop monitoring, mark possible, withdraw; current state and history read back as expected at each step; every refusal fires; no row is deleted
 - [x] The old per-client row stays equal to the new current state after every step of that check (a deliberately broken mirror fails it)
 - [x] ADR written
-- [ ] CI green on the PR
-- [ ] Applied to every instance by the sanctioned path; nothing written to client data (registry rows and functions only)
+- [x] CI green on the PR
+- [x] Applied to every instance by the sanctioned path; nothing written to client data (registry rows and functions only)

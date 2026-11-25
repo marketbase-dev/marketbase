@@ -16,7 +16,15 @@ Provenance rules (settled 2026-11-25):
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** built 2026-11-25 (schema/103, `scripts/check_company_relationship_conversion.py` 27/27; the per-instance runner is the private toolkit's `convert_company_relationships.py`, which carries client names). Running it on the instances follows the merge.
+
+**As built:**
+
+- The conversion is database functions (`set_own_company`, `convert_company_relationship`, `mark_unmarked_link`), so CI tests it on synthetic rows of every shape the instances hold.
+- `monitoring/monitor`, `client/choice` and `relationship/status` on a link are no longer registered as decisions only: old values with no recorded decider travel unclassified. The door itself still writes decisions only (`set_link_decision` refuses a missing decider).
+- A company-level monitor decision on file is COPIED onto the link; the company-level one stays active because two readers use it (the voice selector and the coverage-plan page). Ticket 03 moves them and closes it.
+- The old-shaped view now shows own companies as `self` rows again.
+- Equality is exact on every state and text column; dates are reported. Known, documented date differences: a monitor date where a dated decision replaced the old date, and a client-choice date the old row never recorded.
 
 - [ ] Dry run per instance prints what it would write; execute is per instance, id-keyed, one transaction, rowcounts asserted against the dry run
 - [ ] After execute, per instance: old rows and `v_company_relationships_from_links` are equal, column by column

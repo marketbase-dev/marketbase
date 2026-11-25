@@ -185,6 +185,13 @@ jobs:
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
           python3 scripts/check_company_relationship_door.py
 
+      # 103: old rows convert into the link format without inventing a decider,
+      # the old table stays byte-for-byte unchanged, and a second run writes nothing.
+      - name: Company relationship conversion behaves (103)
+        run: |
+          export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+          python3 scripts/check_company_relationship_conversion.py
+
       - name: Lead merge re-points, refuses, deletes nothing (080)
         run: |
           export MARKETBASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"

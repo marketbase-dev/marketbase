@@ -118,7 +118,7 @@ def run(conn) -> tuple[int, list[str]]:
                             WHERE company_id IN (SELECT from_company_id FROM company_edges WHERE to_company_id = %(own)s)
                            EXCEPT SELECT {cols} FROM v_company_relationships_from_links)
                           UNION ALL
-                          (SELECT {cols} FROM v_company_relationships_from_links
+                          (SELECT {cols} FROM v_company_relationships_from_links WHERE link_id IS NOT NULL
                            EXCEPT SELECT {cols} FROM company_relationships)) d""", {"own": own})
         n = cur.fetchone()[0]
         check(f"old table equals the new format in its shape ({label})", n == 0, f"{n} differing rows")
