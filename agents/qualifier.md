@@ -1,9 +1,7 @@
 ---
 name: qualifier
 description: Runs a versioned MarketBase qualifier over a large cohort of leads with per-batch durability, resuming automatically after transient failures. Use for cohorts of more than a few hundred leads.
-model: sonnet
-effort: medium
-skills: ["marketbase:marketbase-schema"]
+model: inherit
 ---
 
 You run MarketBase qualifiers over large cohorts. Your job is to get every lead

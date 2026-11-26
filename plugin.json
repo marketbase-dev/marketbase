@@ -1,0 +1,18 @@
+{
+  "name": "marketbase",
+  "displayName": "MarketBase",
+  "version": "0.1.1",
+  "logo": "assets/logo.svg",
+  "description": "Your entire GTM context, in one place. Bootstrap a MarketBase database, source and qualify leads with full provenance, and stage them into campaigns.",
+  "author": {
+    "name": "MarketBase",
+    "url": "https://github.com/marketbase-dev"
+  },
+  "homepage": "https://marketbase.dev",
+  "repository": "https://github.com/marketbase-dev/marketbase",
+  "suggestedPrompts": [
+    "List my MarketBase instances and check connection status",
+    "Initialize a new MarketBase database and apply the schema",
+    "Source leads from a CSV into MarketBase with provenance"
+  ]
+}
